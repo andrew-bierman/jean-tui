@@ -235,6 +235,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}),
 			)
 		}
+
+	case activityTickMsg:
+		// Check if enough time has passed since last activity check
+		if time.Since(m.lastActivityCheck) >= m.activityCheckInterval {
+			m.lastActivityCheck = time.Now()
+			cmd = m.checkSessionActivity()
+			return m, cmd
+		}
+		return m, m.scheduleActivityCheck()
+
+	case activityCheckedMsg:
+		if msg.err == nil {
+			// Update sessions with activity information
+			m.sessions = msg.sessions
+		}
+		// Continue scheduling activity checks
+		cmd = m.scheduleActivityCheck()
+		return m, cmd
 	}
 
 	return m, cmd

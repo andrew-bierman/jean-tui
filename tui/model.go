@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -62,6 +63,10 @@ type Model struct {
 
 	// Branch status tracking
 	lastCreatedBranch string // Last created branch name (for auto-selection after creation)
+
+	// Activity tracking
+	lastActivityCheck     time.Time
+	activityCheckInterval time.Duration
 
 	// Modal state
 	modal                  modalType
@@ -134,9 +139,12 @@ func NewModel(repoPath string, autoClaude bool) Model {
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
+	m.activityCheckInterval = 2 * time.Second
+	m.lastActivityCheck = time.Now()
 	return tea.Batch(
 		m.loadWorktrees,
 		m.loadBaseBranch,
+		m.scheduleActivityCheck(),
 		tea.EnterAltScreen,
 	)
 }
@@ -191,6 +199,13 @@ type (
 	branchPulledMsg struct {
 		err         error
 		hadConflict bool
+	}
+
+	activityTickMsg time.Time
+
+	activityCheckedMsg struct {
+		sessions []session.Session
+		err      error
 	}
 )
 
@@ -438,5 +453,23 @@ func (m Model) pullFromBaseBranch(worktreePath, baseBranch string) tea.Cmd {
 		}
 
 		return branchPulledMsg{err: nil, hadConflict: false}
+	}
+}
+
+// scheduleActivityCheck schedules periodic activity checks
+func (m Model) scheduleActivityCheck() tea.Cmd {
+	return tea.Every(2*time.Second, func(t time.Time) tea.Msg {
+		return activityTickMsg(t)
+	})
+}
+
+// checkSessionActivity checks for recent session activity
+func (m Model) checkSessionActivity() tea.Cmd {
+	return func() tea.Msg {
+		sessions, err := m.sessionManager.List()
+		if err != nil {
+			return activityCheckedMsg{sessions: []session.Session{}, err: err}
+		}
+		return activityCheckedMsg{sessions: sessions, err: nil}
 	}
 }
