@@ -78,8 +78,8 @@ gcool() {
                 elif [ "$auto_claude" = "true" ]; then
                     # Check if claude is available
                     if command -v claude >/dev/null 2>&1; then
-                        # Create detached session with claude
-                        tmux new-session -d -s "$session_name" -c "$worktree_path" claude
+                        # Create detached session with claude in plan mode
+                        tmux new-session -d -s "$session_name" -c "$worktree_path" claude --permission-mode plan
                     else
                         # Fallback: create detached session with shell and show message
                         tmux new-session -d -s "$session_name" -c "$worktree_path" \; \

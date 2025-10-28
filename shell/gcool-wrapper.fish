@@ -74,8 +74,8 @@ function gcool
                     else if test "$auto_claude" = "true"
                         # Check if claude is available
                         if command -v claude &> /dev/null
-                            # Start with claude
-                            tmux new-session -s "$session_name" -c "$worktree_path" claude
+                            # Start with claude in plan mode
+                            tmux new-session -s "$session_name" -c "$worktree_path" claude --permission-mode plan
                         else
                             # Fallback: start with shell and show message
                             tmux new-session -s "$session_name" -c "$worktree_path"
