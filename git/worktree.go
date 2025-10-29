@@ -32,19 +32,19 @@ func NewManager(repoPath string) *Manager {
 	return &Manager{repoPath: repoPath}
 }
 
-// List returns all worktrees in the repository
-func (m *Manager) List() ([]Worktree, error) {
+// List returns all worktrees in the repository with status relative to the base branch
+func (m *Manager) List(baseBranch string) ([]Worktree, error) {
 	cmd := exec.Command("git", "-C", m.repoPath, "worktree", "list", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	return m.parseWorktrees(string(output))
+	return m.parseWorktrees(string(output), baseBranch)
 }
 
-// parseWorktrees parses the output of 'git worktree list --porcelain'
-func (m *Manager) parseWorktrees(output string) ([]Worktree, error) {
+// parseWorktrees parses the output of 'git worktree list --porcelain' and calculates branch status
+func (m *Manager) parseWorktrees(output string, baseBranch string) ([]Worktree, error) {
 	var worktrees []Worktree
 	var current Worktree
 
@@ -99,6 +99,27 @@ func (m *Manager) parseWorktrees(output string) ([]Worktree, error) {
 		hasUncommitted, err := m.HasUncommittedChanges(worktrees[i].Path)
 		if err == nil {
 			worktrees[i].HasUncommitted = hasUncommitted
+		}
+	}
+
+	// Calculate branch status relative to base branch
+	if baseBranch != "" {
+		for i := range worktrees {
+			// Skip detached HEAD and main repo worktrees
+			if strings.HasPrefix(worktrees[i].Branch, "(detached") {
+				continue
+			}
+
+			// Skip if we can't get branch status (base branch might not exist locally)
+			aheadCount, behindCount, err := m.GetBranchStatus(worktrees[i].Path, worktrees[i].Branch, baseBranch)
+			if err != nil {
+				// Silent skip - base branch might not exist locally or there might be other issues
+				continue
+			}
+
+			worktrees[i].AheadCount = aheadCount
+			worktrees[i].BehindCount = behindCount
+			worktrees[i].IsOutdated = behindCount > 0
 		}
 	}
 
@@ -486,7 +507,20 @@ func (m *Manager) HasUncommittedChanges(worktreePath string) (bool, error) {
 }
 
 // FetchRemote fetches updates from the remote repository without merging
+// Returns nil if remote doesn't exist (graceful skip) or if fetch succeeds
+// Returns error only if remote exists but fetch fails
 func (m *Manager) FetchRemote() error {
+	// Check if 'origin' remote exists
+	checkCmd := exec.Command("git", "-C", m.repoPath, "remote", "get-url", "origin")
+	checkOutput, err := checkCmd.CombinedOutput()
+	checkOutputStr := strings.TrimSpace(string(checkOutput))
+
+	// If remote doesn't exist or check fails, skip fetch gracefully
+	if err != nil || checkOutputStr == "" {
+		return nil // No remote configured, skip fetch
+	}
+
+	// Remote exists, attempt fetch
 	cmd := exec.Command("git", "-C", m.repoPath, "fetch", "origin")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -567,8 +601,19 @@ func (m *Manager) AbortMerge(worktreePath string) error {
 }
 
 // PullCurrentBranch pulls the current branch from origin
-// Uses git pull origin <branch>
+// For repositories without a remote, falls back to no-op
 func (m *Manager) PullCurrentBranch(worktreePath, branch string) error {
+	// Check if 'origin' remote exists
+	checkCmd := exec.Command("git", "-C", worktreePath, "remote", "get-url", "origin")
+	checkOutput, err := checkCmd.CombinedOutput()
+	checkOutputStr := strings.TrimSpace(string(checkOutput))
+	hasRemote := err == nil && checkOutputStr != ""
+
+	// If no remote, skip pull
+	if !hasRemote {
+		return nil
+	}
+
 	cmd := exec.Command("git", "-C", worktreePath, "pull", "origin", branch)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -583,9 +628,23 @@ func (m *Manager) PullCurrentBranch(worktreePath, branch string) error {
 }
 
 // PullBranchInPath pulls a specific branch from origin in the given directory
-// Uses git pull origin <branch> in the specified path
+// For repositories without a remote, falls back to local merge
 func (m *Manager) PullBranchInPath(path, branch string) error {
-	cmd := exec.Command("git", "-C", path, "pull", "origin", branch)
+	// Check if 'origin' remote exists
+	checkCmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+	checkOutput, err := checkCmd.CombinedOutput()
+	checkOutputStr := strings.TrimSpace(string(checkOutput))
+	hasRemote := err == nil && checkOutputStr != ""
+
+	var cmd *exec.Cmd
+	if hasRemote {
+		// Remote exists, use git pull
+		cmd = exec.Command("git", "-C", path, "pull", "origin", branch)
+	} else {
+		// No remote, use local merge instead
+		cmd = exec.Command("git", "-C", path, "merge", branch, "--no-edit")
+	}
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		outputStr := string(output)
@@ -599,8 +658,23 @@ func (m *Manager) PullBranchInPath(path, branch string) error {
 }
 
 // PullCurrentBranchWithOutput pulls current branch and returns the git output and error
+// For repositories without a remote, falls back to local merge
 func (m *Manager) PullCurrentBranchWithOutput(worktreePath, branch string) (string, error) {
-	cmd := exec.Command("git", "-C", worktreePath, "pull", "origin", branch)
+	// Check if 'origin' remote exists
+	checkCmd := exec.Command("git", "-C", worktreePath, "remote", "get-url", "origin")
+	checkOutput, err := checkCmd.CombinedOutput()
+	checkOutputStr := strings.TrimSpace(string(checkOutput))
+	hasRemote := err == nil && checkOutputStr != ""
+
+	var cmd *exec.Cmd
+	if hasRemote {
+		// Remote exists, use git pull
+		cmd = exec.Command("git", "-C", worktreePath, "pull", "origin", branch)
+	} else {
+		// No remote, use local merge instead
+		cmd = exec.Command("git", "-C", worktreePath, "merge", branch, "--no-edit")
+	}
+
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 	if err != nil {
@@ -614,8 +688,23 @@ func (m *Manager) PullCurrentBranchWithOutput(worktreePath, branch string) (stri
 }
 
 // PullBranchInPathWithOutput pulls a specific branch and returns the git output and error
+// For repositories without a remote, falls back to local merge
 func (m *Manager) PullBranchInPathWithOutput(path, branch string) (string, error) {
-	cmd := exec.Command("git", "-C", path, "pull", "origin", branch)
+	// Check if 'origin' remote exists
+	checkCmd := exec.Command("git", "-C", path, "remote", "get-url", "origin")
+	checkOutput, err := checkCmd.CombinedOutput()
+	checkOutputStr := strings.TrimSpace(string(checkOutput))
+	hasRemote := err == nil && checkOutputStr != ""
+
+	var cmd *exec.Cmd
+	if hasRemote {
+		// Remote exists, use git pull
+		cmd = exec.Command("git", "-C", path, "pull", "origin", branch)
+	} else {
+		// No remote, use local merge instead
+		cmd = exec.Command("git", "-C", path, "merge", branch, "--no-edit")
+	}
+
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
 	if err != nil {

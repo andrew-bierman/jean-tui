@@ -202,18 +202,19 @@ func (m Model) renderDetails() string {
 		}
 	}
 
-	// Show pull hint if behind
-	if m.baseBranch != "" && wt.Branch != m.baseBranch && !strings.HasPrefix(wt.Branch, "(detached") {
-		if wt.BehindCount > 0 && !wt.IsCurrent && strings.Contains(wt.Path, ".workspaces") {
-			b.WriteString("\n")
-			b.WriteString(normalItemStyle.Copy().Foreground(accentColor).Render("Press 'P' to pull changes from base branch"))
-		}
-	}
-
 	// Add action hints
 	b.WriteString("\n")
 	b.WriteString(detailKeyStyle.Render("Actions:"))
 	b.WriteString("\n")
+
+	// Show pull hint if behind (as first action)
+	if m.baseBranch != "" && wt.Branch != m.baseBranch && !strings.HasPrefix(wt.Branch, "(detached") {
+		if wt.BehindCount > 0 && !wt.IsCurrent && strings.Contains(wt.Path, ".workspaces") {
+			b.WriteString(normalItemStyle.Copy().Foreground(accentColor).Render("  p pull changes from base branch"))
+			b.WriteString("\n\n")
+		}
+	}
+
 	b.WriteString(normalItemStyle.Copy().Foreground(accentColor).Render("  t for open terminal"))
 	b.WriteString("\n")
 	// Get the default editor
@@ -1156,12 +1157,13 @@ func (m Model) renderHelperModal() string {
 				key         string
 				description string
 			}{
-				{"R", "Rename current branch"},
-				{"B", "Checkout/switch branch in main repo"},
 				{"b", "Change base branch for new worktrees"},
+				{"B", "Checkout/switch branch in main repo"},
 				{"C", "Commit all uncommitted changes"},
-				{"p", "Pull changes from base branch"},
+				{"p", "Merge base branch into current worktree"},
 				{"P", "Push & create draft PR"},
+				{"r", "Refresh status (fetch from remote, no merging)"},
+				{"R", "Rename current branch"},
 			},
 		},
 		{
@@ -1170,13 +1172,12 @@ func (m Model) renderHelperModal() string {
 				key         string
 				description string
 			}{
-				{"r", "Refresh & pull latest commits"},
-				{"o", "Open worktree in default editor"},
 				{"e", "Select default editor"},
+				{"h", "Show this help"},
+				{"o", "Open worktree in default editor"},
+				{"q", "Quit application"},
 				{"s", "Open settings"},
 				{"S", "View tmux sessions"},
-				{"h", "Show this help"},
-				{"q", "Quit application"},
 			},
 		},
 	}

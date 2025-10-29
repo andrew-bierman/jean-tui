@@ -20,6 +20,13 @@ import (
 const version = "0.1.0"
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "Fatal error: %v\n", r)
+			os.Exit(1)
+		}
+	}()
+
 	// Check for unsupported Windows (native, not WSL2)
 	if runtime.GOOS == "windows" {
 		if !isRunningInWSL() {

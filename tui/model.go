@@ -242,7 +242,7 @@ type (
 
 // Commands
 func (m Model) loadWorktrees() tea.Msg {
-	worktrees, err := m.gitManager.List()
+	worktrees, err := m.gitManager.List(m.baseBranch)
 	return worktreesLoadedMsg{worktrees: worktrees, err: err}
 }
 
@@ -521,91 +521,23 @@ func (m Model) pullFromBaseBranch(worktreePath, baseBranch string) tea.Cmd {
 	}
 }
 
-// refreshWithPull orchestrates pulling latest commits and refreshing worktrees
-// 1. Pulls base branch in main repository
-// 2. Pulls base branch in selected worktree
-// 3. Pulls selected worktree's current branch from origin
-// 4. Refreshes worktree list
+// refreshWithPull fetches latest commits and refreshes worktree status
+// Read-only operation: fetches from remote but does NOT merge or pull anything
+// User must explicitly use 'p' keybinding to pull/merge changes
 func (m Model) refreshWithPull() tea.Cmd {
 	return func() tea.Msg {
 		msg := refreshWithPullMsg{
 			updatedBranches: make(map[string]int),
-			upToDate:        true, // Assume up to date unless we pull something
+			upToDate:        true,
 		}
 
-		// Fetch all updates from remote first
+		// Fetch all updates from remote first to get latest refs
 		if err := m.gitManager.FetchRemote(); err != nil {
 			return refreshWithPullMsg{err: fmt.Errorf("failed to fetch updates: %w", err)}
 		}
 
-		wt := m.selectedWorktree()
-		if wt == nil {
-			return refreshWithPullMsg{err: fmt.Errorf("no worktree selected")}
-		}
-
-		// Step 1: Pull base branch in main repository
-		if m.baseBranch != "" {
-			output, err := m.gitManager.PullBranchInPathWithOutput(m.repoPath, m.baseBranch)
-			if err != nil {
-				// Check if it's a conflict - if so, abort and return error
-				if strings.Contains(err.Error(), "merge conflict") {
-					_ = m.gitManager.AbortMerge(m.repoPath)
-					return refreshWithPullMsg{err: fmt.Errorf("merge conflict in main repo while pulling base branch. Merge aborted")}
-				}
-				// For non-conflict errors, continue with next step
-			} else {
-				// Parse output to track commits
-				upToDate, commits := m.gitManager.ParsePullOutput(output)
-				if !upToDate && commits > 0 {
-					msg.upToDate = false
-					msg.updatedBranches[m.baseBranch] += commits
-				}
-			}
-		}
-
-		// Step 2: Pull base branch in selected worktree
-		if m.baseBranch != "" && wt.Branch != m.baseBranch {
-			output, err := m.gitManager.PullBranchInPathWithOutput(wt.Path, m.baseBranch)
-			if err != nil {
-				// Check if it's a conflict - if so, abort and return error
-				if strings.Contains(err.Error(), "merge conflict") {
-					_ = m.gitManager.AbortMerge(wt.Path)
-					return refreshWithPullMsg{err: fmt.Errorf("merge conflict in worktree while pulling base branch. Merge aborted")}
-				}
-				// For non-conflict errors, continue with next step
-			} else {
-				// Parse output to track commits
-				upToDate, commits := m.gitManager.ParsePullOutput(output)
-				if !upToDate && commits > 0 {
-					msg.upToDate = false
-					msg.mergedBaseBranch = true
-					// Don't add to updatedBranches for base branch merge, it's tracked separately
-				}
-			}
-		}
-
-		// Step 3: Pull selected worktree's current branch from origin
-		if wt.Branch != "" {
-			output, err := m.gitManager.PullCurrentBranchWithOutput(wt.Path, wt.Branch)
-			if err != nil {
-				// Check if it's a conflict - if so, abort and return error
-				if strings.Contains(err.Error(), "merge conflict") {
-					_ = m.gitManager.AbortMerge(wt.Path)
-					return refreshWithPullMsg{err: fmt.Errorf("merge conflict while pulling branch '%s'. Merge aborted", wt.Branch)}
-				}
-				// For non-conflict errors, still continue to refresh
-			} else {
-				// Parse output to track commits
-				upToDate, commits := m.gitManager.ParsePullOutput(output)
-				if !upToDate && commits > 0 {
-					msg.upToDate = false
-					msg.updatedBranches[wt.Branch] += commits
-				}
-			}
-		}
-
-		// Step 4: Worktree list will be reloaded by the Update handler
-		// Return success so the handler can reload the list
+		// Worktree list will be reloaded by the Update handler
+		// This recalculates ahead/behind counts based on fetched refs
 		return msg
 	}
 }
