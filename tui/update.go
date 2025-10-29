@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -249,7 +250,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return clearErrorMsg{}
 			})
 		} else {
-			m.status = "Refreshed and pulled latest commits"
+			// Build detailed status message based on what was pulled
+			m.status = buildRefreshStatusMessage(msg)
 			m.err = nil
 			// Reload worktree list to show updated status
 			cmd = m.loadWorktrees
@@ -1187,4 +1189,42 @@ func (m Model) handleTmuxConfigModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// buildRefreshStatusMessage constructs a detailed status message based on refresh results
+func buildRefreshStatusMessage(msg refreshWithPullMsg) string {
+	// If everything was already up to date
+	if msg.upToDate && len(msg.updatedBranches) == 0 && !msg.mergedBaseBranch {
+		return "Already up to date (0 new commits)"
+	}
+
+	// Build a summary with commit counts
+	var totalCommits int
+	var branchDetails []string
+
+	// Add branch-specific updates
+	for branch, commits := range msg.updatedBranches {
+		if commits > 0 {
+			totalCommits += commits
+			branchDetails = append(branchDetails, fmt.Sprintf("%s (+%d)", branch, commits))
+		}
+	}
+
+	// If we merged base branch into worktree, note that
+	if msg.mergedBaseBranch && len(branchDetails) > 0 {
+		return fmt.Sprintf("Pulled %d commits: %s", totalCommits, strings.Join(branchDetails, ", "))
+	} else if msg.mergedBaseBranch {
+		return "Merged base branch into worktree"
+	}
+
+	// Summary message
+	if totalCommits == 0 {
+		return "Refreshed (no new commits)"
+	}
+
+	if len(branchDetails) == 1 {
+		return fmt.Sprintf("Pulled %d new commits in %s", totalCommits, branchDetails[0])
+	}
+
+	return fmt.Sprintf("Pulled %d commits: %s", totalCommits, strings.Join(branchDetails, ", "))
 }

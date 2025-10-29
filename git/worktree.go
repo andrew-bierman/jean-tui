@@ -547,3 +547,106 @@ func (m *Manager) PullBranchInPath(path, branch string) error {
 	}
 	return nil
 }
+
+// PullCurrentBranchWithOutput pulls current branch and returns the git output and error
+func (m *Manager) PullCurrentBranchWithOutput(worktreePath, branch string) (string, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "pull", "origin", branch)
+	output, err := cmd.CombinedOutput()
+	outputStr := string(output)
+	if err != nil {
+		// Check if it's a merge conflict
+		if strings.Contains(outputStr, "CONFLICT") || strings.Contains(outputStr, "Automatic merge failed") {
+			return outputStr, fmt.Errorf("merge conflict occurred. Use 'git merge --abort' to abort the merge")
+		}
+		return outputStr, fmt.Errorf("failed to pull: %s", outputStr)
+	}
+	return outputStr, nil
+}
+
+// PullBranchInPathWithOutput pulls a specific branch and returns the git output and error
+func (m *Manager) PullBranchInPathWithOutput(path, branch string) (string, error) {
+	cmd := exec.Command("git", "-C", path, "pull", "origin", branch)
+	output, err := cmd.CombinedOutput()
+	outputStr := string(output)
+	if err != nil {
+		// Check if it's a merge conflict
+		if strings.Contains(outputStr, "CONFLICT") || strings.Contains(outputStr, "Automatic merge failed") {
+			return outputStr, fmt.Errorf("merge conflict occurred. Use 'git merge --abort' to abort the merge")
+		}
+		return outputStr, fmt.Errorf("failed to pull: %s", outputStr)
+	}
+	return outputStr, nil
+}
+
+// ParsePullOutput extracts commit count information from git pull output
+// Returns (upToDate, commitsCount)
+func (m *Manager) ParsePullOutput(output string) (bool, int) {
+	// Check if everything was already up to date
+	if strings.Contains(output, "Already up to date") || strings.Contains(output, "Already up-to-date") {
+		return true, 0
+	}
+
+	// Try to find "X files changed" pattern which indicates commits were pulled
+	// Example output: "... (3 commits) ... 5 files changed, 100 insertions(+), 20 deletions(-)"
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		// Look for commit count info in parentheses like "(3 commits)"
+		if strings.Contains(line, "commits") {
+			// Try to extract number: "* commits", "1 commits", "(3 commits)", etc.
+			parts := strings.Fields(line)
+			for i, part := range parts {
+				if strings.Contains(part, "commit") && i > 0 {
+					// Previous part should be the number
+					prevPart := strings.Trim(parts[i-1], "(),")
+					if count, err := parseCount(prevPart); err == nil && count > 0 {
+						return false, count
+					}
+				}
+			}
+		}
+
+		// Also look for "# commits"  pattern in fetch output
+		if strings.HasPrefix(line, "* [new branch]") || strings.HasPrefix(line, "* [new tag]") {
+			continue
+		}
+
+		// If we see "Fast-forward" or "merge made", commits were definitely pulled
+		if strings.Contains(line, "Fast-forward") || strings.Contains(line, "Merge made") {
+			return false, 1 // At least 1 commit
+		}
+	}
+
+	// If merge happened but we can't count, assume at least 1 commit
+	if strings.Contains(output, "merge") || strings.Contains(output, "Merge") {
+		return false, 1
+	}
+
+	return false, 0
+}
+
+// parseCount tries to parse a string as an integer
+func parseCount(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, fmt.Errorf("empty string")
+	}
+
+	var num string
+	for _, c := range s {
+		if c >= '0' && c <= '9' {
+			num += string(c)
+		}
+	}
+
+	if num == "" {
+		return 0, fmt.Errorf("no digits found")
+	}
+
+	// Convert string to int
+	result := 0
+	for _, c := range num {
+		result = result*10 + int(c-'0')
+	}
+
+	return result, nil
+}

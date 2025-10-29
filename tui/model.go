@@ -204,7 +204,11 @@ type (
 	}
 
 	refreshWithPullMsg struct {
-		err error
+		err               error
+		fetchedCommits    int             // Total commits fetched from remote
+		updatedBranches   map[string]int  // Branch name -> commits pulled
+		upToDate          bool            // Whether everything was already up to date
+		mergedBaseBranch  bool            // Whether base branch was merged into selected worktree
 	}
 
 	activityTickMsg time.Time
@@ -491,6 +495,11 @@ func (m Model) pullFromBaseBranch(worktreePath, baseBranch string) tea.Cmd {
 // 4. Refreshes worktree list
 func (m Model) refreshWithPull() tea.Cmd {
 	return func() tea.Msg {
+		msg := refreshWithPullMsg{
+			updatedBranches: make(map[string]int),
+			upToDate:        true, // Assume up to date unless we pull something
+		}
+
 		// Fetch all updates from remote first
 		if err := m.gitManager.FetchRemote(); err != nil {
 			return refreshWithPullMsg{err: fmt.Errorf("failed to fetch updates: %w", err)}
@@ -503,43 +512,68 @@ func (m Model) refreshWithPull() tea.Cmd {
 
 		// Step 1: Pull base branch in main repository
 		if m.baseBranch != "" {
-			if err := m.gitManager.PullBranchInPath(m.repoPath, m.baseBranch); err != nil {
+			output, err := m.gitManager.PullBranchInPathWithOutput(m.repoPath, m.baseBranch)
+			if err != nil {
 				// Check if it's a conflict - if so, abort and return error
 				if strings.Contains(err.Error(), "merge conflict") {
 					_ = m.gitManager.AbortMerge(m.repoPath)
 					return refreshWithPullMsg{err: fmt.Errorf("merge conflict in main repo while pulling base branch. Merge aborted")}
 				}
 				// For non-conflict errors, continue with next step
+			} else {
+				// Parse output to track commits
+				upToDate, commits := m.gitManager.ParsePullOutput(output)
+				if !upToDate && commits > 0 {
+					msg.upToDate = false
+					msg.updatedBranches[m.baseBranch] += commits
+				}
 			}
 		}
 
 		// Step 2: Pull base branch in selected worktree
 		if m.baseBranch != "" && wt.Branch != m.baseBranch {
-			if err := m.gitManager.PullBranchInPath(wt.Path, m.baseBranch); err != nil {
+			output, err := m.gitManager.PullBranchInPathWithOutput(wt.Path, m.baseBranch)
+			if err != nil {
 				// Check if it's a conflict - if so, abort and return error
 				if strings.Contains(err.Error(), "merge conflict") {
 					_ = m.gitManager.AbortMerge(wt.Path)
 					return refreshWithPullMsg{err: fmt.Errorf("merge conflict in worktree while pulling base branch. Merge aborted")}
 				}
 				// For non-conflict errors, continue with next step
+			} else {
+				// Parse output to track commits
+				upToDate, commits := m.gitManager.ParsePullOutput(output)
+				if !upToDate && commits > 0 {
+					msg.upToDate = false
+					msg.mergedBaseBranch = true
+					// Don't add to updatedBranches for base branch merge, it's tracked separately
+				}
 			}
 		}
 
 		// Step 3: Pull selected worktree's current branch from origin
 		if wt.Branch != "" {
-			if err := m.gitManager.PullCurrentBranch(wt.Path, wt.Branch); err != nil {
+			output, err := m.gitManager.PullCurrentBranchWithOutput(wt.Path, wt.Branch)
+			if err != nil {
 				// Check if it's a conflict - if so, abort and return error
 				if strings.Contains(err.Error(), "merge conflict") {
 					_ = m.gitManager.AbortMerge(wt.Path)
 					return refreshWithPullMsg{err: fmt.Errorf("merge conflict while pulling branch '%s'. Merge aborted", wt.Branch)}
 				}
 				// For non-conflict errors, still continue to refresh
+			} else {
+				// Parse output to track commits
+				upToDate, commits := m.gitManager.ParsePullOutput(output)
+				if !upToDate && commits > 0 {
+					msg.upToDate = false
+					msg.updatedBranches[wt.Branch] += commits
+				}
 			}
 		}
 
 		// Step 4: Worktree list will be reloaded by the Update handler
 		// Return success so the handler can reload the list
-		return refreshWithPullMsg{err: nil}
+		return msg
 	}
 }
 
