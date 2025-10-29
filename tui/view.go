@@ -330,6 +330,8 @@ func (m Model) renderModal() string {
 		return m.renderSettingsModal()
 	case tmuxConfigModal:
 		return m.renderTmuxConfigModal()
+	case themeSelectModal:
+		return m.renderThemeSelectModal()
 	case commitModal:
 		return m.renderCommitModal()
 	case helperModal:
@@ -971,6 +973,40 @@ func (m Model) renderEditorSelectModal() string {
 	)
 }
 
+func (m Model) renderThemeSelectModal() string {
+	var b strings.Builder
+
+	b.WriteString(modalTitleStyle.Render("Select Theme"))
+	b.WriteString("\n\n")
+
+	// Get current theme
+	currentTheme := m.configManager.GetTheme(m.repoPath)
+
+	b.WriteString(helpStyle.Render(fmt.Sprintf("Current: %s", currentTheme)))
+	b.WriteString("\n\n")
+
+	// Show theme list
+	for i, theme := range m.availableThemes {
+		if i == m.themeIndex {
+			line := fmt.Sprintf("› %s - %s", theme.Name, theme.Description)
+			b.WriteString(selectedItemStyle.Render(line))
+		} else {
+			line := fmt.Sprintf("  %s - %s", theme.Name, theme.Description)
+			b.WriteString(normalItemStyle.Render(line))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("↑↓/jk navigate • Enter to select • Esc to cancel"))
+
+	return lipgloss.Place(
+		m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		modalStyle.Render(b.String()),
+	)
+}
+
 func (m Model) renderSettingsModal() string {
 	var b strings.Builder
 
@@ -996,6 +1032,12 @@ func (m Model) renderSettingsModal() string {
 				}
 				return "code"
 			}(),
+		},
+		{
+			name:        "Theme",
+			key:         "h",
+			description: "Change UI theme (matrix, coolify, dracula, nord, solarized)",
+			current:     m.configManager.GetTheme(m.repoPath),
 		},
 		{
 			name:        "Base Branch",

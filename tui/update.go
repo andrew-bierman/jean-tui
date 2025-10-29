@@ -200,6 +200,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 
+	case themeChangedMsg:
+		m.modal = noModal
+		if msg.err != nil {
+			cmd = m.showErrorNotification("Failed to change theme: " + msg.err.Error(), 3*time.Second)
+			return m, cmd
+		} else {
+			cmd = m.showSuccessNotification("Theme changed to: " + msg.theme, 2*time.Second)
+			return m, cmd
+		}
+
 	case branchPulledMsg:
 		if msg.err != nil {
 			if msg.hadConflict {
@@ -522,6 +532,9 @@ func (m Model) handleModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case editorSelectModal:
 		return m.handleEditorSelectModalInput(msg)
+
+	case themeSelectModal:
+		return m.handleThemeSelectModalInput(msg)
 
 	case settingsModal:
 		return m.handleSettingsModalInput(msg)
@@ -1052,6 +1065,26 @@ func (m Model) handleEditorSelectModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	return m.handleListSelectionModalInput(msg, config)
 }
 
+func (m Model) handleThemeSelectModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	config := listSelectionConfig{
+		getCurrentIndex: func() int { return m.themeIndex },
+		getItemCount:    func(m Model) int { return len(m.availableThemes) },
+		incrementIndex:  func(m *Model) { m.themeIndex++ },
+		decrementIndex:  func(m *Model) { m.themeIndex-- },
+		onConfirm: func(m Model) (tea.Model, tea.Cmd) {
+			if m.themeIndex >= 0 && m.themeIndex < len(m.availableThemes) {
+				selectedTheme := m.availableThemes[m.themeIndex]
+				// Convert theme name to lowercase for config
+				themeName := strings.ToLower(selectedTheme.Name)
+				return m, m.changeTheme(themeName)
+			}
+			m.modal = noModal
+			return m, nil
+		},
+	}
+	return m.handleListSelectionModalInput(msg, config)
+}
+
 func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "q":
@@ -1064,7 +1097,7 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down", "j":
-		if m.settingsIndex < 2 { // Now 3 settings (editor, base branch, tmux config)
+		if m.settingsIndex < 3 { // Now 4 settings (editor, theme, base branch, tmux config)
 			m.settingsIndex++
 		}
 
@@ -1090,6 +1123,24 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case 1:
+			// Theme setting - open theme select modal
+			m.modal = themeSelectModal
+			m.modalFocused = 0
+			m.themeIndex = 0
+
+			// Find current theme in the list
+			if m.configManager != nil {
+				currentTheme := m.configManager.GetTheme(m.repoPath)
+				for i, theme := range m.availableThemes {
+					if theme.Name == strings.ToTitle(currentTheme) || theme.Name == strings.Title(currentTheme) {
+						m.themeIndex = i
+						break
+					}
+				}
+			}
+			return m, nil
+
+		case 2:
 			// Base branch setting - open change base branch modal
 			m.modal = changeBaseBranchModal
 			m.modalFocused = 0
@@ -1099,7 +1150,7 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.filteredBranches = nil
 			return m, m.loadBranches
 
-		case 2:
+		case 3:
 			// Tmux config setting - open tmux config modal
 			m.modal = tmuxConfigModal
 			m.modalFocused = 0

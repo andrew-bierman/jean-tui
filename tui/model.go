@@ -38,6 +38,7 @@ const (
 	tmuxConfigModal
 	commitModal
 	helperModal
+	themeSelectModal
 )
 
 // NotificationType defines the type of notification
@@ -108,7 +109,9 @@ type Model struct {
 	createNewBranch        bool
 	editorIndex            int      // Selected editor index
 	editors                []string // List of available editors
-	settingsIndex          int      // Selected setting option index
+	themeIndex      int           // Selected theme index
+	availableThemes []ThemeInfo   // List of available themes
+	settingsIndex   int           // Selected setting option index
 	deleteHasUncommitted   bool     // Whether worktree to delete has uncommitted changes
 	deleteConfirmForce     bool     // User acknowledged they want to delete despite uncommitted changes
 }
@@ -175,6 +178,7 @@ func NewModel(repoPath string, autoClaude bool) Model {
 		autoClaude:         autoClaude,
 		repoPath:           absoluteRepoPath,
 		editors:            editors,
+		availableThemes:    GetAvailableThemes(),
 	}
 }
 
@@ -182,6 +186,17 @@ func NewModel(repoPath string, autoClaude bool) Model {
 func (m Model) Init() tea.Cmd {
 	m.activityCheckInterval = 1 * time.Second
 	m.lastActivityCheck = time.Now()
+
+	// Initialize styles on startup
+	InitStyles()
+
+	// Load and apply the theme from config
+	themeName := m.configManager.GetTheme(m.repoPath)
+	if err := ApplyTheme(themeName); err != nil {
+		// Fall back to matrix theme if the configured theme is invalid
+		ApplyTheme("matrix")
+	}
+
 	return tea.Batch(
 		m.loadWorktrees,
 		m.loadBaseBranch,
@@ -262,6 +277,11 @@ type (
 	commitCreatedMsg struct {
 		err        error
 		commitHash string
+	}
+
+	themeChangedMsg struct {
+		theme string
+		err   error
 	}
 
 	notificationShownMsg struct{}
@@ -477,6 +497,23 @@ func (m Model) createCommit(worktreePath, subject, body string) tea.Cmd {
 
 		commitHash, err := m.gitManager.CreateCommit(worktreePath, subject, body)
 		return commitCreatedMsg{err: err, commitHash: commitHash}
+	}
+}
+
+// changeTheme changes the theme and saves it to config
+func (m Model) changeTheme(themeName string) tea.Cmd {
+	return func() tea.Msg {
+		// Apply the theme
+		if err := ApplyTheme(themeName); err != nil {
+			return themeChangedMsg{theme: themeName, err: err}
+		}
+
+		// Save the theme to config
+		if err := m.configManager.SetTheme(m.repoPath, themeName); err != nil {
+			return themeChangedMsg{theme: themeName, err: err}
+		}
+
+		return themeChangedMsg{theme: themeName, err: nil}
 	}
 }
 

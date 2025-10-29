@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Repositories        map[string]*RepoConfig `json:"repositories"`
 	LastUpdateCheckTime string                 `json:"lastUpdateCheckTime"` // RFC3339 format
+	DefaultTheme        string                 `json:"default_theme,omitempty"` // Global default theme, "" = matrix
 }
 
 // RepoConfig represents configuration for a specific repository
@@ -19,6 +20,7 @@ type RepoConfig struct {
 	LastSelectedBranch string `json:"last_selected_branch,omitempty"`
 	Editor             string `json:"editor,omitempty"`
 	AutoFetchInterval  int    `json:"auto_fetch_interval,omitempty"` // in seconds, 0 = use default (10s)
+	Theme              string `json:"theme,omitempty"`               // Per-repo theme override, "" = use global default
 }
 
 // Manager handles configuration loading and saving
@@ -189,4 +191,54 @@ func (m *Manager) GetLastUpdateCheckTime() string {
 func (m *Manager) SetLastUpdateCheckTime(timestamp string) error {
 	m.config.LastUpdateCheckTime = timestamp
 	return m.save()
+}
+
+// GetTheme returns the theme for a repository
+// Returns per-repo theme if set, otherwise returns global default theme
+// Returns "matrix" if no theme is configured
+func (m *Manager) GetTheme(repoPath string) string {
+	// Check if repo has a per-repo theme override
+	if repo, ok := m.config.Repositories[repoPath]; ok {
+		if repo.Theme != "" {
+			return repo.Theme
+		}
+	}
+
+	// Fall back to global default theme
+	if m.config.DefaultTheme != "" {
+		return m.config.DefaultTheme
+	}
+
+	// Default to matrix theme
+	return "matrix"
+}
+
+// SetTheme sets the theme for a specific repository
+// If theme is empty string, it will use the global default
+func (m *Manager) SetTheme(repoPath, theme string) error {
+	if m.config.Repositories == nil {
+		m.config.Repositories = make(map[string]*RepoConfig)
+	}
+
+	if _, ok := m.config.Repositories[repoPath]; !ok {
+		m.config.Repositories[repoPath] = &RepoConfig{}
+	}
+
+	m.config.Repositories[repoPath].Theme = theme
+	return m.save()
+}
+
+// SetGlobalTheme sets the global default theme for all repositories
+func (m *Manager) SetGlobalTheme(theme string) error {
+	m.config.DefaultTheme = theme
+	return m.save()
+}
+
+// GetGlobalTheme returns the global default theme
+// Returns "matrix" if not set
+func (m *Manager) GetGlobalTheme() string {
+	if m.config.DefaultTheme != "" {
+		return m.config.DefaultTheme
+	}
+	return "matrix"
 }
