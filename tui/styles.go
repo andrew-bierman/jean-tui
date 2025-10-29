@@ -29,7 +29,7 @@ var (
 	warningColor   = lipgloss.Color("#AAFF00") // Yellow-green for warnings
 	successColor   = lipgloss.Color("#00FF41") // Bright green for success
 	errorColor     = lipgloss.Color("#FF0000") // Red for errors
-	mutedColor     = lipgloss.Color("#003B00") // Dark green for muted text
+	mutedColor     = lipgloss.Color("#00AA00") // Medium green for muted text
 	bgColor        = lipgloss.Color("#000000") // Pure black background
 	fgColor        = lipgloss.Color("#00FF41") // Bright green text
 
@@ -62,7 +62,7 @@ var (
 				PaddingRight(2)
 
 	normalItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00AA00")).
+			Foreground(lipgloss.Color("#00FF41")).
 			PaddingLeft(2)
 
 	currentWorktreeStyle = lipgloss.NewStyle().

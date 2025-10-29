@@ -153,6 +153,34 @@ func (m *Manager) getCurrentPath() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// sanitizeBranchForPath converts a branch name to a safe directory name
+// Strips origin/ prefix and replaces slashes with hyphens
+func sanitizeBranchForPath(branch string) string {
+	// Strip origin/ prefix for remote tracking branches
+	path := strings.TrimPrefix(branch, "origin/")
+	// Replace remaining slashes with hyphens to avoid nested directories
+	path = strings.ReplaceAll(path, "/", "-")
+	return path
+}
+
+// getLocalBranchName extracts the local branch name from a branch reference
+// For remote branches like "origin/next", returns "next"
+// For local branches, returns the branch as-is
+func getLocalBranchName(branch string) string {
+	return strings.TrimPrefix(branch, "origin/")
+}
+
+// isRemoteBranch checks if a branch reference is a remote tracking branch
+func isRemoteBranch(branch string) bool {
+	return strings.HasPrefix(branch, "origin/")
+}
+
+// branchExists checks if a local branch exists in the repository
+func (m *Manager) branchExists(branch string) bool {
+	cmd := exec.Command("git", "-C", m.repoPath, "rev-parse", "--verify", branch)
+	return cmd.Run() == nil
+}
+
 // Create creates a new worktree
 func (m *Manager) Create(path, branch string, newBranch bool, baseBranch string) error {
 	// Validate base branch exists if specified
@@ -164,12 +192,26 @@ func (m *Manager) Create(path, branch string, newBranch bool, baseBranch string)
 	}
 
 	args := []string{"-C", m.repoPath, "worktree", "add"}
+	workspacePath := path // May be adjusted below
 
 	if newBranch {
 		args = append(args, "-b", branch)
+	} else if isRemoteBranch(branch) {
+		// For remote branches, check if local branch already exists
+		localBranch := getLocalBranchName(branch)
+		if m.branchExists(localBranch) {
+			// Local branch already exists, generate a unique name
+			// e.g., "next" -> "next-happy-panda-42"
+			uniqueSuffix := generateRandomName()
+			localBranch = fmt.Sprintf("%s-%s", localBranch, uniqueSuffix)
+			// Also update the workspace path to be unique
+			workspacePath = filepath.Join(filepath.Dir(path), localBranch)
+		}
+		// Use --track flag to create local tracking branch (either new or unique name)
+		args = append(args, "--track", "-b", localBranch)
 	}
 
-	args = append(args, path)
+	args = append(args, workspacePath)
 
 	if !newBranch {
 		args = append(args, branch)
@@ -234,13 +276,11 @@ func (m *Manager) ListBranches() ([]string, error) {
 
 	branches := strings.Split(strings.TrimSpace(string(output)), "\n")
 
-	// Filter out remote branches and current branch marker
+	// Filter out current branch marker (origin/HEAD)
 	var filtered []string
 	for _, b := range branches {
 		b = strings.TrimSpace(b)
 		if b != "" && !strings.HasPrefix(b, "origin/HEAD") {
-			// Remove "origin/" prefix for remote branches
-			b = strings.TrimPrefix(b, "origin/")
 			filtered = append(filtered, b)
 		}
 	}
@@ -268,8 +308,9 @@ func (m *Manager) GetDefaultPath(branch string) (string, error) {
 	// Use .workspaces directory inside repo root
 	workspacesDir := filepath.Join(root, ".workspaces")
 
-	// Use branch name as the directory name
-	return filepath.Join(workspacesDir, branch), nil
+	// Sanitize branch name to create safe directory name
+	sanitized := sanitizeBranchForPath(branch)
+	return filepath.Join(workspacesDir, sanitized), nil
 }
 
 // GetWorkspacesDir returns the .workspaces directory path

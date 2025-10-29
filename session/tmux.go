@@ -120,6 +120,10 @@ bind -n WheelUpPane if-shell -F -t = "#{mouse_any_flag}" "send-keys -M" "if -Ft=
 # Make scrolling work like in normal terminal
 set -g terminal-overrides 'xterm*:smcup@:rmcup@'
 
+# Enable clickable links (URLs and local filesystem paths)
+set -g allow-passthrough on
+set -ga terminal-features "*:hyperlinks"
+
 # Better scrollback buffer (10000 lines)
 set -g history-limit 10000
 

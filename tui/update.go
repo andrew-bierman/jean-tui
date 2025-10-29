@@ -469,14 +469,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadSessions
 
 	case "p":
-		// Create draft PR (push + open PR)
-		if wt := m.selectedWorktree(); wt != nil {
-			m.status = "Creating draft PR..."
-			return m, m.createPR(wt.Path, wt.Branch)
-		}
-
-	case "P":
-		// Pull changes from base branch (Shift+P)
+		// Pull changes from base branch
 		if wt := m.selectedWorktree(); wt != nil {
 			// Check if base branch is set
 			if m.baseBranch == "" {
@@ -498,6 +491,13 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			m.status = "Pulling changes from base branch..."
 			return m, m.pullFromBaseBranch(wt.Path, m.baseBranch)
+		}
+
+	case "P":
+		// Create draft PR (push + open PR) (Shift+P)
+		if wt := m.selectedWorktree(); wt != nil {
+			m.status = "Creating draft PR..."
+			return m, m.createPR(wt.Path, wt.Branch)
 		}
 	}
 

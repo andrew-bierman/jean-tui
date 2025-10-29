@@ -57,7 +57,8 @@ func (m Model) View() string {
 func (m Model) renderWorktreeList() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render("📁 Worktrees"))
+	repoName := filepath.Base(m.repoPath)
+	b.WriteString(titleStyle.Render(fmt.Sprintf("📁 %s", repoName)))
 	b.WriteString("\n\n")
 
 	if len(m.worktrees) == 0 {
@@ -96,7 +97,6 @@ func (m Model) renderWorktreeList() string {
 			branch = "(no branch)"
 		}
 
-		dirName := filepath.Base(wt.Path)
 
 		// For current worktree, show it's the main repo
 		var line string
@@ -113,8 +113,6 @@ func (m Model) renderWorktreeList() string {
 		}
 
 		b.WriteString(style.Render(line))
-		b.WriteString("\n")
-		b.WriteString(normalItemStyle.Copy().Foreground(mutedColor).Render(fmt.Sprintf("   └─ %s", dirName)))
 		b.WriteString("\n")
 	}
 
@@ -220,22 +218,18 @@ func (m Model) renderHelpBar() string {
 		"a existing branch",
 		"o open editor",
 		"t terminal",
-		"p create PR",
+		"p pull",
+		"P create PR",
 	}
 
 	row2 := []string{
-		"s settings",
-		"S sessions",
+		"r refresh",
 		"R rename",
 		"d delete",
-		"r refresh",
+		"s settings",
+		"S sessions",
 		"enter switch",
 		"q quit",
-	}
-
-	// Add "P pull" to row1 if selected worktree is behind
-	if wt := m.selectedWorktree(); wt != nil && wt.IsOutdated && wt.BehindCount > 0 && strings.Contains(wt.Path, ".workspaces") {
-		row1 = append(row1, "P pull")
 	}
 
 	help1 := helpStyle.Render(" " + strings.Join(row1, " • ") + " ")
