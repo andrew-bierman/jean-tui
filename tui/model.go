@@ -28,12 +28,13 @@ type SwitchInfo struct {
 
 // ScriptExecution represents a running or completed script
 type ScriptExecution struct {
-	name      string    // Name of the script from gcool.json
-	command   string    // The actual command to run
-	output    string    // Captured output
-	pid       int       // Process ID (for killing)
-	finished  bool      // Whether execution has completed
-	startTime time.Time // When the script started
+	name         string    // Name of the script from gcool.json
+	command      string    // The actual command to run
+	output       string    // Captured output
+	pid          int       // Process ID (for killing)
+	finished     bool      // Whether execution has completed
+	startTime    time.Time // When the script started
+	worktreePath string    // Path to the worktree where this script is running
 }
 
 type modalType int

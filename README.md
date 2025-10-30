@@ -154,12 +154,14 @@ gcool -path /path/to/other/repo
 - `n` - Create new worktree with a **new branch** (random name, selects but doesn't auto-switch)
 - `a` - Create worktree from an **existing branch**
 - `d` / `x` - Delete selected worktree
-- `r` - Refresh worktree list
+- `r` - Run 'run' script on selected worktree
+- `R` (Shift+R) - Refresh worktree list
+- `;` - Open scripts modal
 
 ### Main View - Branch Operations
-- `R` (Shift+R) - Rename current branch
-- `C` (Shift+C) - Checkout/switch branch in main repository
-- `c` - Change base branch for new worktrees
+- `B` (Shift+B) - Rename current branch
+- `K` (Shift+K) - Checkout/switch branch in main repository
+- `b` - Change base branch for new worktrees
 
 ### Main View - Application
 - `s` - Open settings menu

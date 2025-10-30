@@ -801,6 +801,51 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "r":
+		// Run the 'run' script on selected worktree
+		if m.scriptConfig == nil || m.scriptConfig.GetScript("run") == "" {
+			return m, m.showWarningNotification("No 'run' script configured in gcool.json")
+		}
+
+		wt := m.selectedWorktree()
+		if wt == nil {
+			return m, m.showErrorNotification("No worktree selected", 2*time.Second)
+		}
+
+		// Check if 'run' script is already running for this worktree
+		for idx, script := range m.runningScripts {
+			if script.name == "run" && script.worktreePath == wt.Path && !script.finished {
+				// Script is already running for this worktree, open its output modal
+				m.modal = scriptOutputModal
+				m.viewingScriptIdx = idx
+				m.viewingScriptName = "run"
+				return m, nil
+			}
+		}
+
+		scriptCmd := m.scriptConfig.GetScript("run")
+
+		// Create new script execution
+		exec := ScriptExecution{
+			name:         "run",
+			command:      scriptCmd,
+			output:       "",
+			finished:     false,
+			startTime:    time.Now(),
+			worktreePath: wt.Path,
+		}
+		m.runningScripts = append(m.runningScripts, exec)
+
+		// Switch to script output modal to show progress
+		m.modal = scriptOutputModal
+		m.viewingScriptIdx = len(m.runningScripts) - 1
+		m.viewingScriptName = "run"
+
+		// Run the script asynchronously
+		scriptIdx := len(m.runningScripts) - 1
+		return m, m.runScript("run", scriptCmd, wt.Path, scriptIdx)
+
+	case "R":
+		// Refresh: pull latest commits and refresh statuses (Shift+R)
 		cmd = m.showInfoNotification("Pulling latest commits and refreshing...")
 		return m, tea.Batch(cmd, m.refreshWithPull(), m.refreshPRStatuses(), m.checkSessionActivity())
 
@@ -878,8 +923,8 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-	case "R":
-		// Rename current branch (Shift+R)
+	case "B":
+		// Rename current branch (Shift+B)
 		if wt := m.selectedWorktree(); wt != nil {
 			// Check if this is a workspace worktree (in .workspaces directory)
 			if !strings.Contains(wt.Path, ".workspaces") {
@@ -904,7 +949,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if wt := m.selectedWorktree(); wt != nil {
 			// Check if this is a workspace worktree
 			if !strings.Contains(wt.Path, ".workspaces") {
-				return m, m.showWarningNotification("Can only rename workspace branches. Use Shift+R for manual rename.")
+				return m, m.showWarningNotification("Can only rename workspace branches. Use Shift+B for manual rename.")
 			}
 
 			// Check if API key is configured
@@ -927,8 +972,8 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			)
 		}
 
-	case "B":
-		// Checkout/switch branch in main repository (Shift+B for checkout)
+	case "K":
+		// Checkout/switch branch in main repository (Shift+K for checkout)
 		m.modal = checkoutBranchModal
 		m.modalFocused = 0
 		m.branchIndex = 0
@@ -2507,11 +2552,12 @@ func (m Model) handleScriptsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 			// Create new script execution
 			exec := ScriptExecution{
-				name:      scriptName,
-				command:   scriptCmd,
-				output:    "",
-				finished:  false,
-				startTime: time.Now(),
+				name:         scriptName,
+				command:      scriptCmd,
+				output:       "",
+				finished:     false,
+				startTime:    time.Now(),
+				worktreePath: wt.Path,
 			}
 			m.runningScripts = append(m.runningScripts, exec)
 

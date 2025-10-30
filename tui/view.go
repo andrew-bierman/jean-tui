@@ -362,7 +362,8 @@ func (m Model) renderMinimalHelpBar() string {
 		"enter switch",
 		"t terminal",
 		"; scripts",
-		"r refresh",
+		"r run",
+		"R refresh",
 		"h help",
 	}
 
@@ -1633,14 +1634,15 @@ func (m Model) renderHelperModal() string {
 				description string
 			}{
 				{"b", "Change base branch for new worktrees"},
-				{"B", "Checkout/switch branch in main repo"},
+				{"K", "Checkout/switch branch in main repo"},
 				{"c", "Commit all uncommitted changes"},
 				{"p", "Push to remote (with AI branch naming)"},
 				{"P", "Push & create draft PR"},
 				{"u", "Update from base branch (pull/merge)"},
 				{"v", "Open PR in browser"},
-				{"r", "Refresh status (fetch from remote, no merging)"},
-				{"R", "Rename current branch"},
+				{"r", "Run 'run' script on selected worktree"},
+				{"R", "Refresh status (fetch from remote, no merging)"},
+				{"B", "Rename current branch"},
 			},
 		},
 		{
