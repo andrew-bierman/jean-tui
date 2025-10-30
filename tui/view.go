@@ -336,6 +336,8 @@ func (m Model) renderModal() string {
 		return m.renderThemeSelectModal()
 	case commitModal:
 		return m.renderCommitModal()
+	case prContentModal:
+		return m.renderPRContentModal()
 	case helperModal:
 		return m.renderHelperModal()
 	}
@@ -965,6 +967,86 @@ func (m Model) renderCommitModal() string {
 	buttons := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		commitStyle.Render("[ Commit ]"),
+		"  ",
+		cancelStyle.Render("[ Cancel ]"),
+	)
+	b.WriteString(buttons)
+
+	b.WriteString("\n\n")
+	b.WriteString(helpStyle.Render("Tab: next field • Enter: confirm/move • Esc: cancel"))
+
+	// Center the modal
+	modalContent := b.String()
+	modalBox := modalStyle.Render(modalContent)
+
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		modalBox,
+	)
+}
+
+func (m Model) renderPRContentModal() string {
+	var b strings.Builder
+
+	title := "Create Pull Request"
+	b.WriteString(modalTitleStyle.Render(title))
+	b.WriteString("\n\n")
+
+	// Title input
+	b.WriteString(inputLabelStyle.Render("Title (required):"))
+	b.WriteString("\n")
+	titleStyle := normalItemStyle
+	if m.prModalFocused == 0 {
+		titleStyle = selectedItemStyle
+	}
+	b.WriteString(titleStyle.Render(m.prTitleInput.View()))
+	b.WriteString("\n\n")
+
+	// Description input
+	b.WriteString(inputLabelStyle.Render("Description (optional):"))
+	b.WriteString("\n")
+	descriptionStyle := normalItemStyle
+	if m.prModalFocused == 1 {
+		descriptionStyle = selectedItemStyle
+	}
+	b.WriteString(descriptionStyle.Render(m.prDescriptionInput.View()))
+	b.WriteString("\n\n")
+
+	// Spinner or status message
+	if m.generatingPRContent {
+		// Show spinner animation while generating
+		spinnerFrames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+		spinner := spinnerFrames[m.prSpinnerFrame%10]
+		b.WriteString(statusStyle.Render(spinner + " Generating PR content with AI..."))
+		b.WriteString("\n\n")
+	}
+
+	// AI hint
+	hasAIKey := m.configManager != nil && m.configManager.GetOpenRouterAPIKey() != ""
+	if hasAIKey {
+		b.WriteString(helpStyle.Render("💡 Press 'g' to auto-generate PR content with AI"))
+		b.WriteString("\n\n")
+	} else {
+		b.WriteString(helpStyle.Render("💡 Tip: Enable AI in settings (s → a) to auto-generate PR content"))
+		b.WriteString("\n\n")
+	}
+
+	// Buttons
+	createStyle := normalItemStyle
+	cancelStyle := normalItemStyle
+
+	if m.prModalFocused == 2 {
+		createStyle = selectedItemStyle
+	} else if m.prModalFocused == 3 {
+		cancelStyle = selectedItemStyle
+	}
+
+	buttons := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		createStyle.Render("[ Create PR ]"),
 		"  ",
 		cancelStyle.Render("[ Cancel ]"),
 	)
