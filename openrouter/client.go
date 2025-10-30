@@ -163,6 +163,72 @@ Git diff:
 	return name, nil
 }
 
+// GeneratePRContent generates a PR title and description from a git diff
+func (c *Client) GeneratePRContent(diff string) (title, description string, err error) {
+	if c.apiKey == "" {
+		return "", "", fmt.Errorf("OpenRouter API key not configured")
+	}
+
+	// Limit diff to reasonable size
+	if len(diff) > 5000 {
+		diff = diff[:5000]
+	}
+
+	prompt := fmt.Sprintf(`Generate a pull request title and description for these changes.
+
+You must respond with EXACTLY this format (no markdown, no extra text):
+TITLE: [Your title here - max 72 characters, present tense]
+DESCRIPTION: [Your description here - 2-3 sentences explaining what and why]
+
+Examples:
+TITLE: Add dark mode support to UI components
+DESCRIPTION: Implement dark mode theme switcher that respects system preferences. This improves accessibility and reduces eye strain for users in low-light environments.
+
+TITLE: Fix authentication timeout issue
+DESCRIPTION: Increase session timeout from 30 to 60 minutes and add proper token refresh handling. Users are being logged out too frequently during legitimate work sessions.
+
+Git diff:
+%s`, diff)
+
+	response, err := c.callAPI(prompt)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Parse response in format "TITLE: ... \n DESCRIPTION: ..."
+	lines := strings.Split(response, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "TITLE:") {
+			title = strings.TrimSpace(strings.TrimPrefix(line, "TITLE:"))
+			// Continue looking for description
+			for j := i + 1; j < len(lines); j++ {
+				descLine := strings.TrimSpace(lines[j])
+				if strings.HasPrefix(descLine, "DESCRIPTION:") {
+					description = strings.TrimSpace(strings.TrimPrefix(descLine, "DESCRIPTION:"))
+					break
+				}
+			}
+			break
+		}
+	}
+
+	// Validate we got both fields
+	if title == "" {
+		return "", "", fmt.Errorf("failed to parse PR title from AI response")
+	}
+	if description == "" {
+		description = "" // Description is optional
+	}
+
+	// Limit title to 72 characters
+	if len(title) > 72 {
+		title = title[:72]
+	}
+
+	return title, description, nil
+}
+
 // callAPI makes a request to the OpenRouter API
 func (c *Client) callAPI(prompt string) (string, error) {
 	req := ChatRequest{

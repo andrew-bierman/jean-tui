@@ -183,7 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			// AI generation failed - fall back to current name (graceful degradation)
 			cmd = m.showWarningNotification("Using current branch name for PR...")
-			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName))
+			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName, "", ""))
 		}
 
 		// Check if target branch already exists locally
@@ -191,7 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if targetExists {
 			// Target branch already exists - skip rename and use current name for PR
 			cmd = m.showWarningNotification("Branch name already exists, using current name...")
-			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName))
+			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName, "", ""))
 		}
 
 		// Store pending rename state
@@ -224,7 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if targetExists {
 			// Target branch already exists - skip rename and use current name for PR
 			cmd = m.showWarningNotification("Branch name already exists, using current name...")
-			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName))
+			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.oldBranchName, "", ""))
 		}
 
 		cmd = m.showInfoNotification("Renaming branch locally...")
@@ -237,15 +237,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Rename succeeded, now create PR with new name
-		cmd = m.showInfoNotification("Creating draft PR with new branch name...")
-		// Also rename tmux sessions and refresh worktree list to show new branch name
-		return m, tea.Batch(
-			cmd,
-			m.renameSessionsForBranch(msg.oldBranchName, msg.newBranchName),
-			m.createPR(msg.worktreePath, msg.newBranchName),
-			func() tea.Msg { return m.loadWorktrees() },
-		)
+		// Rename succeeded, check if we should generate AI PR content
+		hasAPIKey := m.configManager != nil && m.configManager.GetOpenRouterAPIKey() != ""
+		aiEnabled := m.configManager != nil && m.configManager.GetAIBranchNameEnabled()
+
+		if hasAPIKey && aiEnabled {
+			// Generate AI PR content before creating PR
+			cmd = m.showInfoNotification("📝 Generating PR title and description...")
+			return m, tea.Batch(
+				cmd,
+				m.renameSessionsForBranch(msg.oldBranchName, msg.newBranchName),
+				m.generatePRContent(msg.worktreePath, msg.newBranchName, m.baseBranch),
+				func() tea.Msg { return m.loadWorktrees() },
+			)
+		} else {
+			// No AI, create PR directly with new branch name
+			cmd = m.showInfoNotification("Creating draft PR with new branch name...")
+			return m, tea.Batch(
+				cmd,
+				m.renameSessionsForBranch(msg.oldBranchName, msg.newBranchName),
+				m.createPR(msg.worktreePath, msg.newBranchName, "", ""),
+				func() tea.Msg { return m.loadWorktrees() },
+			)
+		}
 
 	case commitCreatedMsg:
 		if msg.err != nil {
@@ -283,16 +297,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		isRandomName := m.gitManager.IsRandomBranchName(msg.branch)
 
 		shouldAIRename := hasAPIKey && aiEnabled && isRandomName
+		shouldAIContent := hasAPIKey && aiEnabled
 
 		if shouldAIRename {
 			// Start AI rename flow before PR creation
 			cmd = m.showInfoNotification("🤖 Generating semantic branch name...")
 			return m, tea.Batch(cmd, m.generateBranchNameForPR(msg.worktreePath, msg.branch, m.baseBranch))
+		} else if shouldAIContent {
+			// Generate AI PR content (title and description) even without branch rename
+			cmd = m.showInfoNotification("📝 Generating PR title and description...")
+			return m, tea.Batch(cmd, m.generatePRContent(msg.worktreePath, msg.branch, m.baseBranch))
 		} else {
 			// Normal PR creation (no AI)
 			cmd = m.showInfoNotification("Creating draft PR...")
-			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.branch))
+			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.branch, "", ""))
 		}
+
+	case prContentGeneratedMsg:
+		// AI PR content generated (title and description)
+		if msg.err != nil {
+			// AI generation failed - create PR with auto-generated title from branch name
+			cmd = m.showWarningNotification("Using auto-generated title for PR...")
+			return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.branch, "", ""))
+		}
+
+		// Content generated successfully - create PR with AI title and description
+		cmd = m.showInfoNotification("Creating draft PR...")
+		return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.branch, msg.title, msg.description))
 
 	case themeChangedMsg:
 		m.modal = noModal
@@ -685,7 +716,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			} else {
 				// Normal PR creation (no AI)
 				cmd = m.showInfoNotification("Creating draft PR...")
-				return m, tea.Batch(cmd, m.createPR(wt.Path, wt.Branch))
+				return m, tea.Batch(cmd, m.createPR(wt.Path, wt.Branch, "", ""))
 			}
 		}
 
