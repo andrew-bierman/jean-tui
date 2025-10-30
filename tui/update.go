@@ -2,14 +2,24 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coollabsio/gcool/config"
 	"github.com/coollabsio/gcool/git"
 )
+
+// debugLog writes a message to the debug log file
+func debugLog(msg string) {
+	if f, err := os.OpenFile("/tmp/gcool-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		fmt.Fprintf(f, "%s\n", msg)
+		f.Close()
+	}
+}
 
 // Update handles all state updates
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -484,6 +494,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reload worktrees to show updated PR statuses
 		return m, m.loadWorktrees
 
+	case scriptOutputMsg:
+		// Find and update the script execution with this name
+		for i := range m.runningScripts {
+			if m.runningScripts[i].name == msg.scriptName {
+				m.runningScripts[i].output = msg.output
+				m.runningScripts[i].finished = true
+				break
+			}
+		}
+		return m, nil
+
 	case activityTickMsg:
 		// Check if enough time has passed since last activity check
 		if time.Since(m.lastActivityCheck) >= m.activityCheckInterval {
@@ -749,6 +770,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "t":
 		// Open terminal in a separate tmux session (not the Claude session)
+		debugLog("DEBUG: 't' keybinding pressed, TerminalOnly=true")
 		if wt := m.selectedWorktree(); wt != nil {
 			// Save the last selected branch before switching
 			if m.configManager != nil {
@@ -760,8 +782,10 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				AutoClaude:   false,        // Never auto-start Claude for terminal
 				TerminalOnly: true,         // Signal this is a terminal session
 			}
+			debugLog("DEBUG: switchInfo set with TerminalOnly=true, quitting")
 			return m, tea.Quit
 		}
+		debugLog("DEBUG: 't' pressed but no worktree selected")
 
 	case "o":
 		// Open worktree in default IDE
@@ -801,6 +825,18 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.modalFocused = 0
 		m.sessionIndex = 0
 		return m, m.loadSessions
+
+	case ";":
+		// Open scripts modal
+		if m.scriptConfig != nil && (m.scriptConfig.HasScripts() || len(m.runningScripts) > 0) {
+			m.modal = scriptsModal
+			m.selectedScriptIdx = 0
+			// Start with running scripts if any, otherwise available scripts
+			m.isViewingRunning = len(m.runningScripts) > 0
+		} else {
+			return m, m.showWarningNotification("No scripts configured in gcool.json")
+		}
+		return m, nil
 
 	case "p":
 		// Pull changes from base branch
@@ -981,6 +1017,12 @@ func (m Model) handleModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case prListModal:
 		return m.handlePRListModalInput(msg)
+
+	case scriptsModal:
+		return m.handleScriptsModalInput(msg)
+
+	case scriptOutputModal:
+		return m.handleScriptOutputModalInput(msg)
 
 	case helperModal:
 		return m.handleHelperModalInput(msg)
@@ -2124,6 +2166,149 @@ func buildRefreshStatusMessage(msg refreshWithPullMsg) string {
 	}
 
 	return fmt.Sprintf("Pulled %d commits: %s", totalCommits, strings.Join(branchDetails, ", "))
+}
+
+// handleScriptsModalInput handles input in the scripts selection modal
+func (m Model) handleScriptsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Close scripts modal
+		m.modal = noModal
+		return m, nil
+
+	case "up", "k":
+		// Move selection up
+		if m.isViewingRunning {
+			// In running scripts section
+			if m.selectedScriptIdx > 0 {
+				m.selectedScriptIdx--
+			} else if m.scriptConfig.HasScripts() {
+				// Switch to available scripts section at the end
+				m.isViewingRunning = false
+				m.selectedScriptIdx = len(m.scriptNames) - 1
+			}
+		} else {
+			// In available scripts section
+			if m.selectedScriptIdx > 0 {
+				m.selectedScriptIdx--
+			} else if len(m.runningScripts) > 0 {
+				// Switch to running scripts section at the end
+				m.isViewingRunning = true
+				m.selectedScriptIdx = len(m.runningScripts) - 1
+			}
+		}
+		return m, nil
+
+	case "down", "j":
+		// Move selection down
+		if m.isViewingRunning {
+			// In running scripts section
+			if m.selectedScriptIdx < len(m.runningScripts)-1 {
+				m.selectedScriptIdx++
+			} else if m.scriptConfig.HasScripts() {
+				// Switch to available scripts section
+				m.isViewingRunning = false
+				m.selectedScriptIdx = 0
+			}
+		} else {
+			// In available scripts section
+			if m.selectedScriptIdx < len(m.scriptNames)-1 {
+				m.selectedScriptIdx++
+			} else if len(m.runningScripts) > 0 {
+				// Switch to running scripts section
+				m.isViewingRunning = true
+				m.selectedScriptIdx = 0
+			}
+		}
+		return m, nil
+
+	case "d":
+		// Delete/kill running script
+		if m.isViewingRunning && m.selectedScriptIdx < len(m.runningScripts) {
+			script := &m.runningScripts[m.selectedScriptIdx]
+			// Kill the process using syscall
+			if !script.finished && script.pid > 0 {
+				_ = syscall.Kill(script.pid, syscall.SIGKILL)
+				script.finished = true
+			}
+			// Remove script from list
+			m.runningScripts = append(m.runningScripts[:m.selectedScriptIdx], m.runningScripts[m.selectedScriptIdx+1:]...)
+			if m.selectedScriptIdx >= len(m.runningScripts) && m.selectedScriptIdx > 0 {
+				m.selectedScriptIdx--
+			}
+			return m, m.showSuccessNotification("Script killed and removed", 2*time.Second)
+		}
+		return m, nil
+
+	case "enter":
+		// Check if selecting a running script or available script
+		if m.isViewingRunning && m.selectedScriptIdx < len(m.runningScripts) {
+			// Switch to output modal for running script
+			m.modal = scriptOutputModal
+			m.viewingScriptIdx = m.selectedScriptIdx
+			m.viewingScriptName = m.runningScripts[m.selectedScriptIdx].name
+			return m, nil
+		} else if !m.isViewingRunning && m.selectedScriptIdx < len(m.scriptNames) {
+			// Run selected available script
+			scriptName := m.scriptNames[m.selectedScriptIdx]
+			scriptCmd := m.scriptConfig.GetScript(scriptName)
+
+			wt := m.selectedWorktree()
+			if wt == nil {
+				m.modal = noModal
+				return m, m.showErrorNotification("No worktree selected", 2*time.Second)
+			}
+
+			// Create new script execution
+			exec := ScriptExecution{
+				name:      scriptName,
+				command:   scriptCmd,
+				output:    "",
+				finished:  false,
+				startTime: time.Now(),
+			}
+			m.runningScripts = append(m.runningScripts, exec)
+
+			// Switch to script output modal
+			m.modal = scriptOutputModal
+			m.viewingScriptIdx = len(m.runningScripts) - 1
+			m.viewingScriptName = scriptName
+
+			// Run the script asynchronously (pass the index so we can store process reference)
+			scriptIdx := len(m.runningScripts) - 1
+			return m, m.runScript(scriptName, scriptCmd, wt.Path, scriptIdx)
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleScriptOutputModalInput handles input in the script output modal
+func (m Model) handleScriptOutputModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Close script output modal and return to scripts modal
+		m.modal = scriptsModal
+		m.viewingScriptName = ""
+		m.viewingScriptIdx = -1
+		m.selectedScriptIdx = 0
+		return m, nil
+
+	case "k":
+		// Kill script (only if still running)
+		if m.viewingScriptIdx >= 0 && m.viewingScriptIdx < len(m.runningScripts) {
+			script := &m.runningScripts[m.viewingScriptIdx]
+			if !script.finished && script.pid > 0 {
+				_ = syscall.Kill(script.pid, syscall.SIGKILL)
+				script.finished = true
+				return m, nil
+			}
+		}
+		return m, nil
+	}
+
+	return m, nil
 }
 
 func (m Model) handleHelperModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -15,12 +16,24 @@ import (
 	"github.com/coollabsio/gcool/session"
 )
 
+
 // SwitchInfo contains information about the worktree to switch to
 type SwitchInfo struct {
 	Path           string
 	Branch         string
 	AutoClaude     bool
-	TerminalOnly   bool // If true, open terminal session instead of Claude session
+	TerminalOnly   bool   // If true, open terminal session instead of Claude session
+	ScriptCommand  string // If set, run this script command instead of shell/Claude
+}
+
+// ScriptExecution represents a running or completed script
+type ScriptExecution struct {
+	name      string    // Name of the script from gcool.json
+	command   string    // The actual command to run
+	output    string    // Captured output
+	pid       int       // Process ID (for killing)
+	finished  bool      // Whether execution has completed
+	startTime time.Time // When the script started
 }
 
 type modalType int
@@ -43,6 +56,8 @@ const (
 	aiSettingsModal
 	prContentModal
 	prListModal
+	scriptsModal
+	scriptOutputModal
 )
 
 // NotificationType defines the type of notification
@@ -167,6 +182,15 @@ type Model struct {
 
 	// PR list modal state
 	prListIndex int // Selected PR index in the PR list modal
+
+	// Scripts modal state
+	scriptConfig       *config.ScriptConfig   // Loaded script configuration
+	scriptNames        []string               // List of available script names
+	runningScripts     []ScriptExecution      // List of running/completed scripts
+	selectedScriptIdx  int                    // Selected script index (in scripts modal)
+	isViewingRunning   bool                   // Whether selected script is running (vs available)
+	viewingScriptName  string                 // Name of currently viewed script in output modal
+	viewingScriptIdx   int                    // Index in runningScripts of currently viewed script
 }
 
 // NewModel creates a new TUI model
@@ -285,6 +309,12 @@ func NewModel(repoPath string, autoClaude bool) Model {
 				break
 			}
 		}
+	}
+
+	// Load scripts from gcool.json
+	if scriptConfig, err := config.LoadScripts(absoluteRepoPath); err == nil {
+		m.scriptConfig = scriptConfig
+		m.scriptNames = scriptConfig.GetScriptNames()
 	}
 
 	return m
@@ -461,6 +491,11 @@ type (
 
 	prStatusesRefreshedMsg struct {
 		err error
+	}
+
+	scriptOutputMsg struct {
+		scriptName string
+		output     string
 	}
 )
 
@@ -1133,6 +1168,32 @@ func (m *Model) showWarningNotification(message string) tea.Cmd {
 func (m *Model) showInfoNotification(message string) tea.Cmd {
 	duration := 3 * time.Second
 	return m.showNotification(message, NotificationInfo, &duration)
+}
+
+// runScript executes a script and captures its output
+// Uses cmd.Start() so the process can be killed later
+func (m *Model) runScript(scriptName, scriptCmd, worktreePath string, scriptIdx int) tea.Cmd {
+	return func() tea.Msg {
+		cmd := exec.Command("bash", "-c", scriptCmd)
+		cmd.Dir = worktreePath
+
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+
+		// Use Start() instead of Run() so process can be killed
+		if err := cmd.Start(); err == nil {
+			// Store PID in the script execution so we can kill it later
+			if scriptIdx < len(m.runningScripts) {
+				m.runningScripts[scriptIdx].pid = cmd.Process.Pid
+			}
+
+			// Wait for process to complete
+			_ = cmd.Wait()
+		}
+
+		return scriptOutputMsg{scriptName: scriptName, output: out.String()}
+	}
 }
 
 // scheduleNotificationHide schedules the notification to be hidden after specified duration

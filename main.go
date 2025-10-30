@@ -19,6 +19,14 @@ import (
 
 const version = "0.1.0"
 
+// debugLog writes a message to the debug log file
+func debugLog(msg string) {
+	if f, err := os.OpenFile("/tmp/gcool-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		fmt.Fprintf(f, "%s\n", msg)
+		f.Close()
+	}
+}
+
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
@@ -115,7 +123,7 @@ func main() {
 	if m, ok := finalModel.(tui.Model); ok {
 		switchInfo := m.GetSwitchInfo()
 		if switchInfo.Path != "" {
-			// Format: path|branch|auto-claude|terminal-only
+			// Format: path|branch|auto-claude|terminal-only|script-command
 			autoCl := "false"
 			if switchInfo.AutoClaude {
 				autoCl = "true"
@@ -124,14 +132,21 @@ func main() {
 			if switchInfo.TerminalOnly {
 				termOnly = "true"
 			}
-			switchData := fmt.Sprintf("%s|%s|%s|%s", switchInfo.Path, switchInfo.Branch, autoCl, termOnly)
+			switchData := fmt.Sprintf("%s|%s|%s|%s|%s", switchInfo.Path, switchInfo.Branch, autoCl, termOnly, switchInfo.ScriptCommand)
+
+			// Debug: log what we're writing
+			debugLog(fmt.Sprintf("DEBUG main: switchInfo={Path:%q Branch:%q AutoClaude:%v TerminalOnly:%v}", switchInfo.Path, switchInfo.Branch, switchInfo.AutoClaude, switchInfo.TerminalOnly))
+			debugLog(fmt.Sprintf("DEBUG main: switchData=%q", switchData))
 
 			// Check if we should write to a file (for shell wrapper integration)
 			if switchFile := os.Getenv("GCOOL_SWITCH_FILE"); switchFile != "" {
 				// Write to file for shell wrapper
 				if err := os.WriteFile(switchFile, []byte(switchData), 0600); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: could not write switch file: %v\n", err)
+					debugLog(fmt.Sprintf("Warning: could not write switch file: %v", err))
 				}
+				// Verify what was written
+				contents, _ := os.ReadFile(switchFile)
+				debugLog(fmt.Sprintf("DEBUG main: file contents=%q", string(contents)))
 			} else {
 				// Print to stdout (legacy behavior)
 				fmt.Println(switchData)

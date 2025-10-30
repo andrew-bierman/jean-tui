@@ -25,7 +25,7 @@ gcool() {
 
         # Check if switch info was written
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
-        # Read the switch info: path|branch|auto-claude|terminal-only
+        # Read the switch info: path|branch|auto-claude|terminal-only|script-command
         local switch_info=$(cat "$temp_file")
         # Only remove if it's in /tmp (safety check)
         if [[ "$temp_file" == /tmp/* ]] || [[ "$temp_file" == /var/folders/* ]]; then
@@ -33,7 +33,7 @@ gcool() {
         fi
 
         # Parse the info (using worktree_path instead of path to avoid PATH conflict)
-        IFS='|' read -r worktree_path branch auto_claude terminal_only <<< "$switch_info"
+        IFS='|' read -r worktree_path branch auto_claude terminal_only script_command <<< "$switch_info"
 
         # Check if we got valid data (has at least two pipes)
         if [[ "$switch_info" == *"|"*"|"* ]]; then
@@ -56,13 +56,17 @@ gcool() {
                 session_name="${session_name}-terminal"
             fi
 
-            # Check if already in a tmux session
+            # Check if already in a tmux session and if it's the same session we want
             if [ -n "$TMUX" ]; then
-                # Already in tmux, just cd
-                cd "$worktree_path" || return
-                echo "Switched to worktree: $branch"
-                echo "Note: Already in tmux. Session: $session_name would be available outside tmux."
-                return
+                # Get current tmux session name
+                local current_session=$(tmux display-message -p '#S')
+                if [ "$current_session" = "$session_name" ]; then
+                    # Already in the correct session, just cd
+                    cd "$worktree_path" || return
+                    echo "Switched to worktree: $branch"
+                    return
+                fi
+                # Different session - fall through to switch to it
             fi
 
             # Check if session exists (use exact matching with =)
