@@ -470,6 +470,11 @@ func (m Model) loadWorktrees() tea.Msg {
 	return worktreesLoadedMsg{worktrees: worktrees, err: err}
 }
 
+func (m Model) loadWorktreesLightweight() tea.Msg {
+	worktrees, err := m.gitManager.ListLightweight()
+	return worktreesLoadedMsg{worktrees: worktrees, err: err}
+}
+
 func (m Model) loadBranches() tea.Msg {
 	branches, err := m.gitManager.ListBranches()
 	return branchesLoadedMsg{branches: branches, err: err}

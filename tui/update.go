@@ -93,10 +93,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Store the newly created branch name for selection after reload
 			m.lastCreatedBranch = msg.branch
 
-			// Reload worktrees and select the newly created one
+			// Quick refresh without expensive status checks
 			return m, tea.Batch(
 				cmd,
-				m.loadWorktrees,
+				m.loadWorktreesLightweight,
 			)
 		}
 
@@ -113,9 +113,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedIndex = 0
 				}
 			}
+			// Quick refresh without expensive status checks
 			return m, tea.Batch(
 				cmd,
-				m.loadWorktrees,
+				m.loadWorktreesLightweight,
 			)
 		}
 
@@ -129,7 +130,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(
 				cmd,
 				m.renameSessionsForBranch(msg.oldBranch, msg.newBranch),
-				m.loadWorktrees,
 			)
 		}
 
@@ -139,10 +139,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		} else {
 			cmd = m.showSuccessNotification("Branch checked out successfully", 3*time.Second)
-			return m, tea.Batch(
-				cmd,
-				m.loadWorktrees,
-			)
+			return m, cmd
 		}
 
 	case baseBranchLoadedMsg:
@@ -209,8 +206,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			cmd = m.showSuccessNotification("Draft PR created: " + msg.prURL, 5*time.Second)
-			// Refresh worktree list to update status after PR creation
-			return m, tea.Batch(cmd, m.loadWorktrees)
+			return m, cmd
 		}
 
 	case prBranchNameGeneratedMsg:
@@ -301,7 +297,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd,
 				m.renameSessionsForBranch(msg.oldBranchName, msg.newBranchName),
 				m.generatePRContent(msg.worktreePath, msg.newBranchName, m.baseBranch),
-				func() tea.Msg { return m.loadWorktrees() },
 			)
 		} else {
 			// No AI - open PR content modal for manual entry
@@ -320,10 +315,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Rename tmux sessions
 			cmd = m.renameSessionsForBranch(msg.oldBranchName, msg.newBranchName)
-			return m, tea.Batch(
-				cmd,
-				func() tea.Msg { return m.loadWorktrees() },
-			)
+			return m, cmd
 		}
 
 	case commitCreatedMsg:
@@ -373,11 +365,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			// Normal commit (not before PR) - just refresh worktree list
-			return m, tea.Batch(
-				cmd,
-				m.loadWorktrees,
-			)
+			// Normal commit (not before PR)
+			return m, cmd
 		}
 
 	case autoCommitBeforePRMsg:
@@ -399,11 +388,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if shouldAIRename {
 			// Start AI rename flow before PR creation
 			cmd = m.showInfoNotification("🤖 Generating semantic branch name...")
-			return m, tea.Batch(cmd, m.generateBranchNameForPR(msg.worktreePath, msg.branch, m.baseBranch), m.loadWorktrees)
+			return m, tea.Batch(cmd, m.generateBranchNameForPR(msg.worktreePath, msg.branch, m.baseBranch))
 		} else if shouldAIContent {
 			// Generate AI PR content (title and description) even without branch rename
 			cmd = m.showInfoNotification("📝 Generating PR title and description...")
-			return m, tea.Batch(cmd, m.generatePRContent(msg.worktreePath, msg.branch, m.baseBranch), m.loadWorktrees)
+			return m, tea.Batch(cmd, m.generatePRContent(msg.worktreePath, msg.branch, m.baseBranch))
 		} else {
 			// No AI available - open PR content modal for manual entry
 			m.modal = prContentModal
@@ -419,7 +408,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prTitleInput.Focus()
 			m.prDescriptionInput.SetValue("")
 
-			return m, m.loadWorktrees
+			return m, nil
 		}
 
 	case prContentGeneratedMsg:
@@ -470,11 +459,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			cmd = m.showSuccessNotification("Successfully pulled changes from base branch", 3*time.Second)
-			// Refresh worktree list after successful pull
-			return m, tea.Batch(
-				cmd,
-				m.loadWorktrees,
-			)
+			return m, cmd
 		}
 
 	case refreshWithPullMsg:

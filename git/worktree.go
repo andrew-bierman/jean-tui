@@ -45,6 +45,18 @@ func (m *Manager) List(baseBranch string) ([]Worktree, error) {
 	return m.parseWorktrees(string(output), baseBranch)
 }
 
+// ListLightweight returns all worktrees without expensive status checks (for quick refreshes)
+func (m *Manager) ListLightweight() ([]Worktree, error) {
+	cmd := exec.Command("git", "-C", m.repoPath, "worktree", "list", "--porcelain")
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	// Pass empty baseBranch to skip status calculations
+	return m.parseWorktrees(string(output), "")
+}
+
 // parseWorktrees parses the output of 'git worktree list --porcelain' and calculates branch status
 func (m *Manager) parseWorktrees(output string, baseBranch string) ([]Worktree, error) {
 	var worktrees []Worktree
