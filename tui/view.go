@@ -362,8 +362,8 @@ func (m Model) renderMinimalHelpBar() string {
 		"enter switch",
 		"t terminal",
 		"; scripts",
-		"r run",
-		"R refresh",
+		"r refresh",
+		"R run",
 		"h help",
 	}
 

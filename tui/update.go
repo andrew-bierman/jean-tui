@@ -214,9 +214,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCreatedMsg:
 		if msg.err != nil {
 			debugLog(fmt.Sprintf("PR creation failed: %v", msg.err))
-			cmd = m.showErrorNotification("Failed to create PR: " + msg.err.Error(), 4*time.Second)
+			errMsg := msg.err.Error()
+
+			// Check if the error is "PR already exists"
+			if strings.Contains(errMsg, "already exists") {
+				// Only retry once - if we're already retrying, don't try again
+				if !m.prRetryInProgress {
+					// Check if AI is configured
+					hasAPIKey := m.configManager != nil && m.configManager.GetOpenRouterAPIKey() != ""
+					aiContentEnabled := m.configManager != nil && m.configManager.GetAICommitEnabled()
+
+					if hasAPIKey && aiContentEnabled && msg.worktreePath != "" && msg.branch != "" {
+						// Mark that we're in a retry attempt
+						m.prRetryInProgress = true
+						// Store the worktree and branch for retry
+						m.prRetryWorktreePath = msg.worktreePath
+						m.prRetryBranch = msg.branch
+
+						// Trigger PR content regeneration
+						cmd = m.showWarningNotification("PR already exists. Regenerating content with AI...")
+						return m, tea.Batch(cmd, m.generatePRContent(msg.worktreePath, msg.branch, m.baseBranch))
+					}
+				}
+			}
+
+			// Clear retry state before showing error
+			m.prRetryInProgress = false
+			m.prRetryWorktreePath = ""
+			m.prRetryBranch = ""
+			m.prRetryTitle = ""
+			m.prRetryDescription = ""
+
+			cmd = m.showErrorNotification("Failed to create PR: " + errMsg, 4*time.Second)
 			return m, cmd
 		} else {
+			// Clear retry state on successful creation
+			m.prRetryInProgress = false
+			m.prRetryWorktreePath = ""
+			m.prRetryBranch = ""
+			m.prRetryTitle = ""
+			m.prRetryDescription = ""
+
 			debugLog(fmt.Sprintf("PR created successfully: %s", msg.prURL))
 			// Find the worktree branch for this PR
 			var prBranch string
@@ -244,7 +282,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			debugLog("Triggering worktree refresh after PR creation")
-			cmd = m.showSuccessNotification("Draft PR created: " + msg.prURL, 5*time.Second)
+			cmd = m.showSuccessNotification("PR created / updated: " + msg.prURL, 5*time.Second)
 			return m, tea.Batch(
 				cmd,
 				m.loadWorktrees,
@@ -501,9 +539,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.err != nil {
+			// AI generation failed
+			// Check if this was a retry attempt
+			if m.prRetryWorktreePath != "" {
+				m.prRetryInProgress = false
+				m.prRetryWorktreePath = ""
+				m.prRetryBranch = ""
+				m.prRetryTitle = ""
+				m.prRetryDescription = ""
+				cmd = m.showErrorNotification("Failed to regenerate PR content: " + msg.err.Error(), 4*time.Second)
+				return m, cmd
+			}
 			// AI generation failed - show error and keep modal open for manual entry
 			cmd = m.showWarningNotification("Failed to generate PR content: " + msg.err.Error())
 			return m, cmd
+		}
+
+		// Check if this is a PR retry attempt (PR already exists)
+		if m.prRetryWorktreePath != "" {
+			// Store the generated content and worktree/branch info before clearing
+			retryWorktreePath := m.prRetryWorktreePath
+			retryBranch := m.prRetryBranch
+			// Clear retry state before returning
+			m.prRetryInProgress = false
+			m.prRetryWorktreePath = ""
+			m.prRetryBranch = ""
+			m.prRetryTitle = ""
+			m.prRetryDescription = ""
+			// Retry creating PR with new content (skip push since branch already exists)
+			cmd = m.showInfoNotification("Retrying PR creation with new content...")
+			return m, tea.Batch(cmd, m.createPRRetry(retryWorktreePath, retryBranch, msg.title, msg.description))
 		}
 
 		// Check if we're in PR content modal
@@ -515,9 +580,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Not in modal - auto-create PR with generated content (for auto-generation flow)
-		cmd = m.showInfoNotification("Creating draft PR...")
-		return m, tea.Batch(cmd, m.createPR(msg.worktreePath, msg.branch, msg.title, msg.description))
+		// Not in modal - auto-create or update PR with generated content (for auto-generation flow)
+		cmd = m.showInfoNotification("Creating or updating draft PR...")
+		return m, tea.Batch(cmd, m.createOrUpdatePR(msg.worktreePath, msg.branch, msg.title, msg.description))
 
 	case pushBranchNameGeneratedMsg:
 		// AI branch name generated for push
@@ -801,7 +866,12 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "r":
-		// Run the 'run' script on selected worktree
+		// Refresh: pull latest commits and refresh statuses
+		cmd = m.showInfoNotification("Pulling latest commits and refreshing...")
+		return m, tea.Batch(cmd, m.refreshWithPull(), m.refreshPRStatuses(), m.checkSessionActivity())
+
+	case "R":
+		// Run the 'run' script on selected worktree (Shift+R)
 		if m.scriptConfig == nil || m.scriptConfig.GetScript("run") == "" {
 			return m, m.showWarningNotification("No 'run' script configured in gcool.json")
 		}
@@ -843,11 +913,6 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Run the script asynchronously
 		scriptIdx := len(m.runningScripts) - 1
 		return m, m.runScript("run", scriptCmd, wt.Path, scriptIdx)
-
-	case "R":
-		// Refresh: pull latest commits and refresh statuses (Shift+R)
-		cmd = m.showInfoNotification("Pulling latest commits and refreshing...")
-		return m, tea.Batch(cmd, m.refreshWithPull(), m.refreshPRStatuses(), m.checkSessionActivity())
 
 	case "n":
 		// Instantly create worktree with random branch name from base branch
@@ -1133,58 +1198,39 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "P":
-		// Create draft PR (push + open PR) (Shift+P)
+		// Create draft PR (Shift+P) - only creates PR, no commits or pushes
 		if wt := m.selectedWorktree(); wt != nil {
-			// First check if there are uncommitted changes
+			// Check if there are uncommitted changes
 			hasUncommitted, err := m.gitManager.HasUncommittedChanges(wt.Path)
 			if err != nil {
 				return m, m.showErrorNotification("Failed to check for uncommitted changes: "+err.Error(), 3*time.Second)
 			}
+			if hasUncommitted {
+				return m, m.showErrorNotification("Cannot create PR: you have uncommitted changes. Commit them first with 'c'", 4*time.Second)
+			}
 
+			// Check if there are unpushed commits
+			hasUnpushed, err := m.gitManager.HasUnpushedCommits(wt.Path, wt.Branch)
+			if err != nil {
+				return m, m.showErrorNotification("Failed to check for unpushed commits: "+err.Error(), 3*time.Second)
+			}
+			if hasUnpushed {
+				return m, m.showErrorNotification("Cannot create PR: you have unpushed commits. Push them first with 'p'", 4*time.Second)
+			}
+
+			// All clean - proceed to PR creation
 			// Check AI configuration
 			hasAPIKey := m.configManager != nil && m.configManager.GetOpenRouterAPIKey() != ""
-			aiEnabled := m.configManager != nil && m.configManager.GetAIBranchNameEnabled()
 			aiContentEnabled := m.configManager != nil && m.configManager.GetAICommitEnabled()
-			hasAI := hasAPIKey && (aiEnabled || aiContentEnabled)
 
-			// If there are uncommitted changes, decide how to handle them
-			if hasUncommitted {
-				if hasAI && aiContentEnabled {
-				// AI is enabled for commit messages - generate commit message with AI first
-				cmd = m.showInfoNotification("🤖 Generating commit message...")
-				m.commitBeforePR = true
-				m.prCreationPending = wt.Path
-				return m, tea.Batch(cmd, m.generateCommitMessageWithAI(wt.Path))
-			} else if hasAI {
-				// AI is enabled for branch/PR but not commit - auto-commit with simple message and proceed
-				cmd = m.showInfoNotification("Committing changes...")
-				return m, tea.Batch(cmd, m.autoCommitBeforePR(wt.Path, wt.Branch))
-			} else {
-				// No AI - show commit modal for user to write proper commit message
-				m.modal = commitModal
-				m.modalFocused = 0
-				m.commitSubjectInput.SetValue("")
-				m.commitSubjectInput.Focus()
-				m.commitBodyInput.SetValue("")
-				m.commitBeforePR = true
-				m.prCreationPending = wt.Path
-				return m, nil
-			}
-			}
-
-			// No uncommitted changes - proceed to PR creation
-			// Check if we should do AI renaming first
-			isRandomName := m.gitManager.IsRandomBranchName(wt.Branch)
-			shouldAIRename := hasAPIKey && aiEnabled && isRandomName
-
-			if shouldAIRename {
-				// Start AI rename flow before PR creation
-				cmd = m.showInfoNotification("🤖 Generating semantic branch name...")
-				return m, tea.Batch(cmd, m.generateBranchNameForPR(wt.Path, wt.Branch, m.baseBranch))
+			if hasAPIKey && aiContentEnabled {
+				// Generate PR content with AI (title and description from diff)
+				cmd = m.showInfoNotification("🤖 Generating PR content...")
+				return m, tea.Batch(cmd, m.generatePRContent(wt.Path, wt.Branch, m.baseBranch))
 			} else {
 				// Normal PR creation (no AI)
 				cmd = m.showInfoNotification("Creating draft PR...")
-				return m, tea.Batch(cmd, m.createPR(wt.Path, wt.Branch, "", ""))
+				return m, tea.Batch(cmd, m.createOrUpdatePR(wt.Path, wt.Branch, "", ""))
 			}
 		}
 

@@ -95,3 +95,42 @@ func (m *Manager) GetPRStatus(prURL string) (string, error) {
 	status := strings.ToLower(strings.TrimSpace(string(output)))
 	return status, nil
 }
+
+// GetPRForBranch gets the PR URL for a given branch (if it exists)
+func (m *Manager) GetPRForBranch(worktreePath, branch string) (string, error) {
+	// Search for PR on this branch
+	cmd := exec.Command("gh", "pr", "list", "--head", branch, "--json", "url", "--jq", ".[0].url")
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to search for PR: %s", string(output))
+	}
+
+	prURL := strings.TrimSpace(string(output))
+	if prURL == "" || prURL == "null" {
+		return "", nil // No PR found
+	}
+	return prURL, nil
+}
+
+// UpdatePR updates the title and/or description of an existing PR
+func (m *Manager) UpdatePR(worktreePath, prIdentifier, title, description string) error {
+	args := []string{"pr", "edit", prIdentifier}
+
+	if title != "" {
+		args = append(args, "--title", title)
+	}
+
+	if description != "" {
+		args = append(args, "--body", description)
+	}
+
+	cmd := exec.Command("gh", args...)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to update PR: %s", string(output))
+	}
+
+	return nil
+}

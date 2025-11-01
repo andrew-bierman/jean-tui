@@ -195,6 +195,13 @@ type Model struct {
 	isViewingRunning   bool                   // Whether selected script is running (vs available)
 	viewingScriptName  string                 // Name of currently viewed script in output modal
 	viewingScriptIdx   int                    // Index in runningScripts of currently viewed script
+
+	// PR retry state (when PR already exists)
+	prRetryWorktreePath string // Worktree path for PR retry attempt
+	prRetryBranch       string // Branch name for PR retry attempt
+	prRetryTitle        string // Generated title for PR retry
+	prRetryDescription  string // Generated description for PR retry
+	prRetryInProgress   bool   // Whether we're already in a retry attempt (prevent infinite loops)
 }
 
 // NewModel creates a new TUI model
@@ -401,8 +408,10 @@ type (
 	}
 
 	prCreatedMsg struct {
-		err   error
-		prURL string
+		err          error
+		prURL        string
+		branch       string // Branch name for retry on "PR already exists"
+		worktreePath string // Worktree path for retry on "PR already exists"
 	}
 
 	branchPulledMsg struct {
@@ -736,11 +745,53 @@ func (m Model) createPR(worktreePath, branch string, optionalTitle string, optio
 		// Create draft PR
 		prURL, err := m.githubManager.CreateDraftPR(worktreePath, branch, m.baseBranch, title, description)
 		if err != nil {
-			return prCreatedMsg{err: err}
+			return prCreatedMsg{err: err, branch: branch, worktreePath: worktreePath}
 		}
 
-		return prCreatedMsg{prURL: prURL}
+		return prCreatedMsg{prURL: prURL, branch: branch, worktreePath: worktreePath}
 	}
+}
+
+// createOrUpdatePR creates a new PR or updates existing one if it already exists
+func (m Model) createOrUpdatePR(worktreePath, branch string, title string, description string) tea.Cmd {
+	return func() tea.Msg {
+		if branch == "" {
+			return prCreatedMsg{err: fmt.Errorf("branch name is empty"), branch: branch, worktreePath: worktreePath}
+		}
+
+		// Verify base branch is set
+		if m.baseBranch == "" {
+			return prCreatedMsg{err: fmt.Errorf("base branch not set. Press 'b' to set base branch"), branch: branch, worktreePath: worktreePath}
+		}
+
+		// Check if a PR already exists for this branch
+		existingPRURL, err := m.githubManager.GetPRForBranch(worktreePath, branch)
+		if err != nil {
+			return prCreatedMsg{err: fmt.Errorf("failed to check for existing PR: %w", err), branch: branch, worktreePath: worktreePath}
+		}
+
+		// If PR exists, update it instead of creating a new one
+		if existingPRURL != "" {
+			if err := m.githubManager.UpdatePR(worktreePath, branch, title, description); err != nil {
+				return prCreatedMsg{err: err, branch: branch, worktreePath: worktreePath}
+			}
+			return prCreatedMsg{prURL: existingPRURL, branch: branch, worktreePath: worktreePath}
+		}
+
+		// PR doesn't exist, create a new one
+		prURL, err := m.githubManager.CreateDraftPR(worktreePath, branch, m.baseBranch, title, description)
+		if err != nil {
+			return prCreatedMsg{err: err, branch: branch, worktreePath: worktreePath}
+		}
+
+		return prCreatedMsg{prURL: prURL, branch: branch, worktreePath: worktreePath}
+	}
+}
+
+// createPRRetry creates a PR without re-pushing (for when PR already exists with different title/description)
+func (m Model) createPRRetry(worktreePath, branch string, title string, description string) tea.Cmd {
+	// Use the new createOrUpdatePR instead
+	return m.createOrUpdatePR(worktreePath, branch, title, description)
 }
 
 // createCommit creates a commit with the given subject and body
