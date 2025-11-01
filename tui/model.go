@@ -1553,14 +1553,23 @@ func (m Model) scheduleNotificationHide(id int64, duration time.Duration) tea.Cm
 	)
 }
 
-// sortWorktrees sorts the worktree list by last modified time (most recent first)
+// sortWorktrees sorts the worktree list with root worktree first, then by last modified time (most recent first)
 func (m *Model) sortWorktrees() {
 	if len(m.worktrees) == 0 {
 		return
 	}
 
-	// Sort by LastModified time, most recent first
-	sort.Slice(m.worktrees, func(i, j int) bool {
+	// Sort: root worktree (IsCurrent=true) always first, then by LastModified (most recent first)
+	sort.SliceStable(m.worktrees, func(i, j int) bool {
+		// Root worktree always comes first
+		if m.worktrees[i].IsCurrent {
+			return true
+		}
+		if m.worktrees[j].IsCurrent {
+			return false
+		}
+
+		// Otherwise, sort by last modified time (most recent first)
 		return m.worktrees[i].LastModified.After(m.worktrees[j].LastModified)
 	})
 }
