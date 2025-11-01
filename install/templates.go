@@ -41,7 +41,7 @@ gcool() {
         if [ "$debug_enabled" = "true" ]; then
         echo "DEBUG wrapper: switch file exists and has content" >> "$debug_log"
         fi
-        # Read the switch info: path|branch|auto-claude|terminal-only|script-command|claude-session-name
+        # Read the switch info: path|branch|auto-claude|target-window|script-command|claude-session-name|is-claude-initialized
         local switch_info=$(cat "$temp_file")
         if [ "$debug_enabled" = "true" ]; then
         echo "DEBUG wrapper: switch_info=$switch_info" >> "$debug_log"
@@ -52,7 +52,7 @@ gcool() {
         fi
 
         # Parse the info (using worktree_path instead of path to avoid PATH conflict)
-        IFS='|' read -r worktree_path branch auto_claude terminal_only script_command claude_session_name is_claude_initialized <<< "$switch_info"
+        IFS='|' read -r worktree_path branch auto_claude target_window script_command claude_session_name is_claude_initialized <<< "$switch_info"
 
         # Check if we got valid data (has at least two pipes)
         if [[ "$switch_info" == *"|"*"|"* ]]; then
@@ -70,11 +70,6 @@ gcool() {
             session_name="${session_name#-}"
             session_name="${session_name%-}"
 
-            # If terminal-only, append -terminal suffix
-            if [ "$terminal_only" = "true" ]; then
-                session_name="${session_name}-terminal"
-            fi
-
             # Check if already in a tmux session and if it's the same session we want
             if [ -n "$TMUX" ]; then
                 # Get current tmux session name
@@ -88,69 +83,62 @@ gcool() {
                 # Different session - fall through to switch to it
             fi
 
-            # Check if session exists (use exact matching with =)
+            # Set window index based on target window
+            # Note: with base-index 1, windows are 1, 2, 3... instead of 0, 1, 2...
+            local window_index="1"
+            if [ "$target_window" = "claude" ]; then
+                window_index="2"
+            fi
+
+            # Check if session exists
             if tmux has-session -t "=$session_name" 2>/dev/null; then
-                # Attach to existing session
-                tmux attach-session -t "$session_name"
-                # After detaching, loop back to gcool
-                continue
-            else
-                # Create new session in detached mode first
-                # Terminal-only sessions always use shell, never Claude
-                if [ "$terminal_only" = "true" ]; then
-                    # Always start with shell for terminal sessions
-                    if [ "$debug_enabled" = "true" ]; then
-                    echo "DEBUG wrapper: Creating terminal-only session: $session_name" >> "$debug_log"
-                    fi
-                    tmux new-session -d -s "$session_name" -c "$worktree_path"
-                elif [ "$auto_claude" = "true" ]; then
-                    # Check if claude is available
-                    if command -v claude >/dev/null 2>&1; then
-                        # Create detached session with claude in plan mode
-                        # Use --continue on subsequent runs to resume previous conversations
-                        if [ "$debug_enabled" = "true" ]; then
-                        echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >> "$debug_log"
-                        fi
-                        if [ "$debug_enabled" = "true" ]; then
-                        echo "DEBUG wrapper: tmux_session_name=$session_name" >> "$debug_log"
-                        fi
-                        if [ "$debug_enabled" = "true" ]; then
-                        echo "DEBUG wrapper: branch=$branch" >> "$debug_log"
-                        fi
-                        if [ "$debug_enabled" = "true" ]; then
-                        echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >> "$debug_log"
-                        fi
-                        if [ "$is_claude_initialized" = "true" ]; then
-                            if [ "$debug_enabled" = "true" ]; then
-                            echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --continue --permission-mode plan'" >> "$debug_log"
+                # Session exists - check if target window exists
+                if ! tmux list-windows -t "$session_name" -F "#{window_index}:#{window_name}" | grep -q "^${window_index}:"; then
+                    # Target window doesn't exist, create it
+                    if [ "$target_window" = "claude" ]; then
+                        # Create claude window with claude command
+                        if command -v claude >/dev/null 2>&1; then
+                            if [ "$is_claude_initialized" = "true" ]; then
+                                tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude --continue --permission-mode plan"
+                            else
+                                tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude --permission-mode plan"
                             fi
-                            tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --continue --permission-mode plan"
                         else
-                            if [ "$debug_enabled" = "true" ]; then
-                            echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --permission-mode plan'" >> "$debug_log"
-                            fi
-                            tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --permission-mode plan"
+                            # Fallback to shell if claude not available
+                            tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude"
                         fi
                     else
-                        # Fallback: create detached session with shell and show message
-                        if [ "$debug_enabled" = "true" ]; then
-                        echo "DEBUG wrapper: Claude not found, creating shell session" >> "$debug_log"
+                        # Create terminal window
+                        tmux new-window -t "$session_name:1" -c "$worktree_path" -n "terminal"
+                    fi
+                fi
+                # Attach to target window
+                tmux attach-session -t "$session_name:${window_index}"
+                continue
+            else
+                # Create new session with both windows
+                if [ "$debug_enabled" = "true" ]; then
+                    echo "DEBUG wrapper: Creating new session: $session_name" >> "$debug_log"
+                fi
+                # Window 1: terminal (always created) - base-index 1 makes first window = 1
+                tmux new-session -d -s "$session_name" -c "$worktree_path" -n "terminal"
+
+                # Window 2: claude (if auto-claude is true)
+                if [ "$auto_claude" = "true" ]; then
+                    if command -v claude >/dev/null 2>&1; then
+                        if [ "$is_claude_initialized" = "true" ]; then
+                            tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude --continue --permission-mode plan"
+                        else
+                            tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude --permission-mode plan"
                         fi
-                        tmux new-session -d -s "$session_name" -c "$worktree_path" \; \
-                            send-keys "echo 'Note: Claude CLI not found. Install it or use --no-claude flag.'" C-m \; \
-                            send-keys "echo 'You are in: $worktree_path'" C-m
+                    else
+                        # Fallback: create window with shell
+                        tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude"
                     fi
-                else
-                    # Create detached session with shell
-                    if [ "$debug_enabled" = "true" ]; then
-                    echo "DEBUG wrapper: Creating shell session: $session_name" >> "$debug_log"
-                    fi
-                    tmux new-session -d -s "$session_name" -c "$worktree_path"
                 fi
 
-                # Now attach to the session
-                tmux attach-session -t "$session_name"
-                # After detaching from newly created session, loop back to gcool
+                # Attach to target window
+                tmux attach-session -t "$session_name:${window_index}"
                 continue
             fi
         else
@@ -196,7 +184,7 @@ function gcool
 
         # Check if switch info was written
         if test -f "$temp_file" -a -s "$temp_file"
-            # Read the switch info: path|branch|auto-claude|terminal-only|script-command|claude-session-name
+            # Read the switch info: path|branch|auto-claude|target-window|script-command|claude-session-name|is-claude-initialized
             set switch_info (cat $temp_file)
             rm $temp_file
 
@@ -208,17 +196,17 @@ function gcool
                 set worktree_path $parts[1]
                 set branch $parts[2]
                 set auto_claude $parts[3]
-                set terminal_only "false"
+                set target_window "terminal"
                 if test (count $parts) -ge 4
-                    set terminal_only $parts[4]
+                    set target_window $parts[4]
                 end
                 set claude_session_name ""
                 if test (count $parts) -ge 6
                     set claude_session_name $parts[6]
                 end
                 set is_claude_initialized "false"
-                if test (count $parts) -ge 8
-                    set is_claude_initialized $parts[8]
+                if test (count $parts) -ge 7
+                    set is_claude_initialized $parts[7]
                 end
 
                 # Check if tmux is available
@@ -234,11 +222,6 @@ function gcool
                 set session_name (string replace -ra '--+' '-' $session_name)
                 set session_name (string trim -c '-' $session_name)
 
-                # If terminal-only, append -terminal suffix
-                if test "$terminal_only" = "true"
-                    set session_name "$session_name-terminal"
-                end
-
                 # Check if already in a tmux session
                 if test -n "$TMUX"
                     # Already in tmux, just cd
@@ -248,52 +231,60 @@ function gcool
                     return
                 end
 
-                # Check if session exists (use exact matching with =)
+                # Set window index based on target window
+                # Note: with base-index 1, windows are 1, 2, 3... instead of 0, 1, 2...
+                set window_index "1"
+                if test "$target_window" = "claude"
+                    set window_index "2"
+                end
+
+                # Check if session exists
                 if tmux has-session -t "=$session_name" 2>/dev/null
-                    # Attach to existing session
-                    tmux attach-session -t "$session_name"
-                    # After detaching, continue the loop to allow switching sessions
+                    # Session exists - check if target window exists
+                    set window_exists (tmux list-windows -t "$session_name" -F "#{window_index}:#{window_name}" | grep "^${window_index}:" | wc -l)
+                    if test $window_exists -eq 0
+                        # Target window doesn't exist, create it
+                        if test "$target_window" = "claude"
+                            # Create claude window
+                            if command -v claude &> /dev/null
+                                set claude_args "--permission-mode plan"
+                                if test "$is_claude_initialized" = "true"
+                                    set claude_args "--continue --permission-mode plan"
+                                end
+                                tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude $claude_args"
+                            else
+                                # Fallback to shell
+                                tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude"
+                            end
+                        else
+                            # Create terminal window
+                            tmux new-window -t "$session_name:1" -c "$worktree_path" -n "terminal"
+                        end
+                    end
+                    # Attach to target window
+                    tmux attach-session -t "$session_name:${window_index}"
                     continue
                 else
-                    # Create new session
-                    # Terminal-only sessions always use shell, never Claude
-                    if test "$terminal_only" = "true"
-                        # Always start with shell for terminal sessions
-                        tmux new-session -s "$session_name" -c "$worktree_path"
-                    else if test "$auto_claude" = "true"
-                        # Check if claude is available
+                    # Create new session with both windows
+                    # Window 1: terminal (always created) - base-index 1 makes first window = 1
+                    tmux new-session -d -s "$session_name" -c "$worktree_path" -n "terminal"
+
+                    # Window 2: claude (if auto-claude is true)
+                    if test "$auto_claude" = "true"
                         if command -v claude &> /dev/null
-                            # Start with claude in plan mode
-                            # Use --continue on subsequent runs to resume previous conversations
                             set claude_args "--permission-mode plan"
                             if test "$is_claude_initialized" = "true"
                                 set claude_args "--continue --permission-mode plan"
                             end
-                            if test "$debug_enabled" = "true"
-                            echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >&2
-                            end
-                            if test "$debug_enabled" = "true"
-                            echo "DEBUG wrapper: tmux_session_name=$session_name" >&2
-                            end
-                            if test "$debug_enabled" = "true"
-                            echo "DEBUG wrapper: branch=$branch" >&2
-                            end
-                            if test "$debug_enabled" = "true"
-                            echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >&2
-                            end
-                            if test "$debug_enabled" = "true"
-                            echo "DEBUG wrapper: Command: tmux new-session -s '$session_name' -c '$worktree_path' claude $claude_args" >&2
-                            end
-                            tmux new-session -s "$session_name" -c "$worktree_path" claude $claude_args
+                            tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude" "claude $claude_args"
                         else
-                            # Fallback: start with shell and show message
-                            tmux new-session -s "$session_name" -c "$worktree_path"
+                            # Fallback: create window with shell
+                            tmux new-window -t "$session_name:2" -c "$worktree_path" -n "claude"
                         end
-                    else
-                        # Start with shell
-                        tmux new-session -s "$session_name" -c "$worktree_path"
                     end
-                    # After creating and attaching, continue loop to allow switching
+
+                    # Attach to target window
+                    tmux attach-session -t "$session_name:${window_index}"
                     continue
                 end
             end

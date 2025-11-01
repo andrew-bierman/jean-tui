@@ -49,24 +49,9 @@ func (m *Manager) SanitizeBranchName(branch string) string {
 }
 
 // SanitizeName sanitizes a branch name for use as a tmux session name
-// If isTerminal is true, appends "-terminal" suffix to differentiate from Claude sessions
 func (m *Manager) SanitizeName(branch string) string {
-	return m.sanitizeNameWithType(branch, false)
-}
-
-// SanitizeNameTerminal creates a terminal-only session name
-func (m *Manager) SanitizeNameTerminal(branch string) string {
-	return m.sanitizeNameWithType(branch, true)
-}
-
-// sanitizeNameWithType is the internal implementation
-func (m *Manager) sanitizeNameWithType(branch string, isTerminal bool) string {
 	// Sanitize the base name first
 	sanitized := m.SanitizeBranchName(branch)
-
-	if isTerminal {
-		return sessionPrefix + sanitized + "-terminal"
-	}
 	return sessionPrefix + sanitized
 }
 
@@ -78,37 +63,92 @@ func (m *Manager) SessionExists(sessionName string) bool {
 }
 
 // CreateOrAttach creates a new session or attaches to existing one
-// If terminalOnly is true, creates/attaches to a terminal-only session (no Claude)
-func (m *Manager) CreateOrAttach(path, branch string, autoStartClaude bool, terminalOnly bool) error {
-	var sessionName string
-	if terminalOnly {
-		sessionName = m.SanitizeNameTerminal(branch)
-	} else {
-		sessionName = m.SanitizeName(branch)
-	}
+// targetWindow specifies which window to attach to: "terminal" (window 0) or "claude" (window 1)
+// Always creates both windows when creating a new session
+func (m *Manager) CreateOrAttach(path, branch string, autoStartClaude bool, targetWindow string) error {
+	sessionName := m.SanitizeName(branch)
 
 	if m.SessionExists(sessionName) {
-		// Attach to existing session
-		return m.Attach(sessionName)
+		// Session exists - ensure target window exists, create if missing
+		return m.AttachToWindow(sessionName, path, autoStartClaude, targetWindow)
 	}
 
-	// Create new session
-	return m.Create(sessionName, path, autoStartClaude)
+	// Create new session with both windows
+	return m.Create(sessionName, path, autoStartClaude, targetWindow)
 }
 
-// Create creates a new tmux session in detached mode
-func (m *Manager) Create(sessionName, path string, autoStartClaude bool) error {
-	var cmd *exec.Cmd
-
-	if autoStartClaude {
-		// Create detached session and start claude
-		cmd = exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", path, "claude")
-	} else {
-		// Create detached session with just a shell
-		cmd = exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", path)
+// Create creates a new tmux session with both windows
+// Window 1: terminal (shell) - created automatically by new-session with base-index 1
+// Window 2: claude (if autoStartClaude is true)
+func (m *Manager) Create(sessionName, path string, autoStartClaude bool, targetWindow string) error {
+	// Create detached session with window 1 (terminal) - base-index 1 makes first window = 1
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", path, "-n", "terminal")
+	if err := cmd.Run(); err != nil {
+		return err
 	}
 
-	// Run and wait for session to be created
+	// Create window 2 (claude) if autoStartClaude is true
+	if autoStartClaude {
+		cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude", "claude")
+		if err := cmd.Run(); err != nil {
+			// Window creation failed, but session exists, so we continue
+			// The user can manually create the window later
+		}
+	}
+
+	// Attach to the target window
+	return m.AttachToWindow(sessionName, path, autoStartClaude, targetWindow)
+}
+
+// AttachToWindow attaches to a specific window in a session
+// Creates the window if it doesn't exist
+func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool, targetWindow string) error {
+	var windowIndex string
+	var windowName string
+	var windowCommand string
+
+	if targetWindow == "claude" {
+		windowIndex = "2"
+		windowName = "claude"
+		windowCommand = "claude"
+	} else {
+		windowIndex = "1"
+		windowName = "terminal"
+		windowCommand = "" // Will use shell
+	}
+
+	// Check if the target window exists
+	checkCmd := exec.Command("tmux", "list-windows", "-t", sessionName, "-F", "#{window_index}:#{window_name}")
+	output, err := checkCmd.Output()
+	if err == nil {
+		// Parse the windows to check if target window exists
+		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		windowExists := false
+		for _, line := range lines {
+			if strings.Contains(line, windowIndex+":"+windowName) {
+				windowExists = true
+				break
+			}
+		}
+
+		// If window doesn't exist, create it
+		if !windowExists {
+			if targetWindow == "claude" {
+				cmd := exec.Command("tmux", "new-window", "-t", sessionName+":"+windowIndex, "-c", path, "-n", windowName, windowCommand)
+				cmd.Run() // Ignore errors, window might be created concurrently
+			} else {
+				cmd := exec.Command("tmux", "new-window", "-t", sessionName+":"+windowIndex, "-c", path, "-n", windowName)
+				cmd.Run() // Ignore errors
+			}
+		}
+	}
+
+	// Attach to the target window
+	cmd := exec.Command("tmux", "attach-session", "-t", sessionName+":"+windowIndex)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
 	return cmd.Run()
 }
 

@@ -1110,7 +1110,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				Branch:               wt.Branch,
 				SessionName:          wt.Branch, // Use branch name as session name for Claude
 				AutoClaude:           m.autoClaude,
-				TerminalOnly:         false, // Explicitly use Claude session, not terminal-only
+				TargetWindow:         "claude", // Attach to Claude window
 				IsClaudeInitialized:  isInitialized,
 			}
 			m.ensuringWorktree = true
@@ -1178,8 +1178,8 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.loadBranches
 
 	case "t":
-		// Open terminal in a separate tmux session (not the Claude session)
-		m.debugLog("DEBUG: 't' keybinding pressed, TerminalOnly=true")
+		// Open terminal in the terminal window of the session
+		m.debugLog("DEBUG: 't' keybinding pressed, TargetWindow=terminal")
 		if wt := m.selectedWorktree(); wt != nil {
 			// Save the last selected branch before switching
 			if m.configManager != nil {
@@ -1189,9 +1189,9 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.pendingSwitchInfo = &SwitchInfo{
 				Path:         wt.Path,
 				Branch:       wt.Branch,
-				SessionName:  wt.Branch, // Use branch name as session identifier
-				AutoClaude:   false,     // Never auto-start Claude for terminal
-				TerminalOnly: true,      // Signal this is a terminal session
+				SessionName:  wt.Branch,                // Use branch name as session identifier
+				AutoClaude:   false,                    // Never auto-start Claude for terminal window
+				TargetWindow: "terminal",               // Attach to terminal window
 			}
 			m.ensuringWorktree = true
 			m.debugLog("DEBUG: ensuring worktree exists before opening terminal")

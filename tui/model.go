@@ -35,7 +35,7 @@ type SwitchInfo struct {
 	Path                 string
 	Branch               string
 	AutoClaude           bool
-	TerminalOnly         bool   // If true, open terminal session instead of Claude session
+	TargetWindow         string // Which window to attach to: "terminal" or "claude"
 	ScriptCommand        string // If set, run this script command instead of shell/Claude
 	SessionName          string // Custom name for Claude session (for --session flag)
 	IsClaudeInitialized  bool   // Whether this Claude session has been initialized before
@@ -665,14 +665,9 @@ func (m Model) deleteWorktree(path, branch string, force bool) tea.Cmd {
 			_ = m.configManager.CleanupBranch(m.repoPath, branch) // Ignore error, not critical
 		}
 
-		// Then kill the associated tmux sessions if they exist
-		// Kill Claude session
+		// Then kill the associated tmux session if it exists
 		sessionName := m.sessionManager.SanitizeName(branch)
 		_ = m.sessionManager.Kill(sessionName) // Ignore error if session doesn't exist
-
-		// Kill terminal-only session (if it exists)
-		terminalSessionName := m.sessionManager.SanitizeNameTerminal(branch)
-		_ = m.sessionManager.Kill(terminalSessionName) // Ignore error if session doesn't exist
 
 		return worktreeDeletedMsg{err: nil}
 	}
@@ -697,16 +692,9 @@ func (m Model) renameSessionsForBranch(oldBranch, newBranch string) tea.Cmd {
 		// Sanitize both branch names for session names
 		oldSessionName := m.sessionManager.SanitizeName(oldBranch)
 		newSessionName := m.sessionManager.SanitizeName(newBranch)
-		oldTerminalSessionName := m.sessionManager.SanitizeNameTerminal(oldBranch)
-		newTerminalSessionName := m.sessionManager.SanitizeNameTerminal(newBranch)
 
-		// Rename Claude session
+		// Rename session
 		if err := m.sessionManager.RenameSession(oldSessionName, newSessionName); err != nil {
-			// Log error but continue (session might not exist)
-		}
-
-		// Rename terminal session
-		if err := m.sessionManager.RenameSession(oldTerminalSessionName, newTerminalSessionName); err != nil {
 			// Log error but continue (session might not exist)
 		}
 
