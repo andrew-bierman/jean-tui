@@ -406,6 +406,7 @@ func (m Model) Init() tea.Cmd {
 
 	return tea.Batch(
 		m.loadBaseBranch(),
+		m.loadSessions(),
 		m.scheduleActivityCheck(),
 		m.scheduleClaudeStatusCheck(),
 		m.scheduleClaudeStatusAnimationTick(),
@@ -636,6 +637,10 @@ type (
 func (m Model) loadWorktrees() tea.Cmd {
 	return func() tea.Msg {
 		worktrees, err := m.gitManager.List(m.baseBranch)
+		// Calculate sanitized Claude session names for each worktree
+		for i := range worktrees {
+			worktrees[i].ClaudeSessionName = m.sessionManager.SanitizeName(worktrees[i].Branch)
+		}
 		return worktreesLoadedMsg{worktrees: worktrees, err: err}
 	}
 }
@@ -643,6 +648,10 @@ func (m Model) loadWorktrees() tea.Cmd {
 func (m Model) loadWorktreesLightweight() tea.Cmd {
 	return func() tea.Msg {
 		worktrees, err := m.gitManager.ListLightweight()
+		// Calculate sanitized Claude session names for each worktree
+		for i := range worktrees {
+			worktrees[i].ClaudeSessionName = m.sessionManager.SanitizeName(worktrees[i].Branch)
+		}
 		return worktreesLoadedMsg{worktrees: worktrees, err: err}
 	}
 }
@@ -1353,12 +1362,14 @@ func (m Model) GetConfigManager() *config.Manager {
 }
 
 // loadSessions loads tmux sessions for the current repository only
-func (m Model) loadSessions() tea.Msg {
-	sessions, err := m.sessionManager.List(m.repoPath)
-	if err != nil {
-		return statusMsg("Failed to load sessions")
+func (m Model) loadSessions() tea.Cmd {
+	return func() tea.Msg {
+		sessions, err := m.sessionManager.List(m.repoPath)
+		if err != nil {
+			return statusMsg("Failed to load sessions")
+		}
+		return sessionsLoadedMsg{sessions: sessions}
 	}
-	return sessionsLoadedMsg{sessions: sessions}
 }
 
 type sessionsLoadedMsg struct {
@@ -1422,9 +1433,9 @@ func (m Model) checkAndPullFromBase(worktreePath, baseBranch string) tea.Cmd {
 	}
 }
 
-// refreshWithPull fetches latest commits and refreshes worktree status
-// For the main repository: fetches AND pulls to update the working directory
-// For workspace worktrees: fetches only (user must explicitly pull via 'u' keybinding)
+// refreshWithPull fetches latest commits from remote and pulls all worktrees
+// Automatically pulls changes into ALL worktrees (main repo + workspace branches)
+// Skips worktrees with uncommitted changes to prevent merge conflicts
 func (m Model) refreshWithPull() tea.Cmd {
 	return func() tea.Msg {
 		msg := refreshWithPullMsg{
@@ -1437,27 +1448,44 @@ func (m Model) refreshWithPull() tea.Cmd {
 			return refreshWithPullMsg{err: fmt.Errorf("failed to fetch updates: %w", err)}
 		}
 
-		// If the selected worktree is the main repo (IsCurrent), pull to update working directory
-		selected := m.selectedWorktree()
-		if selected != nil && selected.IsCurrent {
-			// Get the current branch of the main repo
-			branch := selected.Branch
-			if branch != "" {
-				// Pull from the remote tracking branch to get latest commits
-				output, err := m.gitManager.PullCurrentBranchWithOutput(m.repoPath, branch)
-				if err != nil {
-					// Pull failed, but fetch succeeded - don't fail the refresh
-					// User can see the behind count and manually pull if needed
-					msg.pullErr = err
-				} else {
-					// Parse the output to extract commit count
-					// ParsePullOutput returns (isUpToDate bool, commitCount int)
-					isUpToDate, commitCount := m.gitManager.ParsePullOutput(output)
-					if !isUpToDate && commitCount > 0 {
-						msg.updatedBranches[branch] = commitCount
-						msg.upToDate = false
-					}
+		// Pull all worktrees (both main repo and workspace branches)
+		for _, wt := range m.worktrees {
+			if wt.Branch == "" {
+				continue // Skip if no branch is checked out
+			}
+
+			// Check if this worktree has uncommitted changes
+			hasUncommitted, _ := m.gitManager.HasUncommittedChanges(wt.Path)
+			if hasUncommitted {
+				continue // Skip pulling if there are uncommitted changes
+			}
+
+			// Pull this worktree's current branch
+			var output string
+			var err error
+
+			if wt.IsCurrent {
+				// For main repo, use PullCurrentBranchWithOutput
+				output, err = m.gitManager.PullCurrentBranchWithOutput(m.repoPath, wt.Branch)
+			} else {
+				// For workspace branches, use PullBranchInPathWithOutput
+				output, err = m.gitManager.PullBranchInPathWithOutput(wt.Path, wt.Branch)
+			}
+
+			if err != nil {
+				// Pull failed for this worktree, but continue with others
+				// Store the first error if no error was already recorded
+				if msg.pullErr == nil {
+					msg.pullErr = fmt.Errorf("failed to pull %s: %w", wt.Branch, err)
 				}
+				continue
+			}
+
+			// Parse the output to extract commit count
+			isUpToDate, commitCount := m.gitManager.ParsePullOutput(output)
+			if !isUpToDate && commitCount > 0 {
+				msg.updatedBranches[wt.Branch] = commitCount
+				msg.upToDate = false
 			}
 		}
 
