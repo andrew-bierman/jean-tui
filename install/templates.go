@@ -7,7 +7,18 @@ const BashZshWrapper = `# BEGIN GCOOL INTEGRATION
 
 gcool() {
     local debug_log="/tmp/gcool-wrapper-debug.log"
+    local debug_enabled=false
+
+    # Check if debug logging is enabled in config
+    if [ -f "$HOME/.config/gcool/config.json" ]; then
+        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/gcool/config.json"; then
+            debug_enabled=true
+        fi
+    fi
+
+    if [ "$debug_enabled" = "true" ]; then
     echo "DEBUG wrapper: gcool function called with args: $@" >> "$debug_log"
+    fi
     # Loop until user explicitly quits gcool (not just detaches from tmux)
     while true; do
         # Save current PATH to restore it later
@@ -27,10 +38,14 @@ gcool() {
 
         # Check if switch info was written
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        if [ "$debug_enabled" = "true" ]; then
         echo "DEBUG wrapper: switch file exists and has content" >> "$debug_log"
+        fi
         # Read the switch info: path|branch|auto-claude|terminal-only|script-command|claude-session-name
         local switch_info=$(cat "$temp_file")
+        if [ "$debug_enabled" = "true" ]; then
         echo "DEBUG wrapper: switch_info=$switch_info" >> "$debug_log"
+        fi
         # Only remove if it's in /tmp (safety check)
         if [[ "$temp_file" == /tmp/* ]] || [[ "$temp_file" == /var/folders/* ]]; then
             rm "$temp_file"
@@ -84,34 +99,52 @@ gcool() {
                 # Terminal-only sessions always use shell, never Claude
                 if [ "$terminal_only" = "true" ]; then
                     # Always start with shell for terminal sessions
+                    if [ "$debug_enabled" = "true" ]; then
                     echo "DEBUG wrapper: Creating terminal-only session: $session_name" >> "$debug_log"
+                    fi
                     tmux new-session -d -s "$session_name" -c "$worktree_path"
                 elif [ "$auto_claude" = "true" ]; then
                     # Check if claude is available
                     if command -v claude >/dev/null 2>&1; then
                         # Create detached session with claude in plan mode
                         # Use --continue on subsequent runs to resume previous conversations
+                        if [ "$debug_enabled" = "true" ]; then
                         echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >> "$debug_log"
+                        fi
+                        if [ "$debug_enabled" = "true" ]; then
                         echo "DEBUG wrapper: tmux_session_name=$session_name" >> "$debug_log"
+                        fi
+                        if [ "$debug_enabled" = "true" ]; then
                         echo "DEBUG wrapper: branch=$branch" >> "$debug_log"
+                        fi
+                        if [ "$debug_enabled" = "true" ]; then
                         echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >> "$debug_log"
+                        fi
                         if [ "$is_claude_initialized" = "true" ]; then
+                            if [ "$debug_enabled" = "true" ]; then
                             echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --continue --permission-mode plan'" >> "$debug_log"
+                            fi
                             tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --continue --permission-mode plan"
                         else
+                            if [ "$debug_enabled" = "true" ]; then
                             echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --permission-mode plan'" >> "$debug_log"
+                            fi
                             tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --permission-mode plan"
                         fi
                     else
                         # Fallback: create detached session with shell and show message
+                        if [ "$debug_enabled" = "true" ]; then
                         echo "DEBUG wrapper: Claude not found, creating shell session" >> "$debug_log"
+                        fi
                         tmux new-session -d -s "$session_name" -c "$worktree_path" \; \
                             send-keys "echo 'Note: Claude CLI not found. Install it or use --no-claude flag.'" C-m \; \
                             send-keys "echo 'You are in: $worktree_path'" C-m
                     fi
                 else
                     # Create detached session with shell
+                    if [ "$debug_enabled" = "true" ]; then
                     echo "DEBUG wrapper: Creating shell session: $session_name" >> "$debug_log"
+                    fi
                     tmux new-session -d -s "$session_name" -c "$worktree_path"
                 fi
 
@@ -143,6 +176,14 @@ const FishWrapper = `# BEGIN GCOOL INTEGRATION
 # Source this in your config.fish to enable gcool with directory switching
 
 function gcool
+    # Check if debug logging is enabled in config
+    set debug_enabled false
+    if test -f "$HOME/.config/gcool/config.json"
+        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/gcool/config.json"
+            set debug_enabled true
+        end
+    end
+
     # Loop until user explicitly quits gcool (not just detaches from tmux)
     while true
         # Create a temp file for communication
@@ -228,11 +269,21 @@ function gcool
                             if test "$is_claude_initialized" = "true"
                                 set claude_args "--continue --permission-mode plan"
                             end
+                            if test "$debug_enabled" = "true"
                             echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >&2
+                            end
+                            if test "$debug_enabled" = "true"
                             echo "DEBUG wrapper: tmux_session_name=$session_name" >&2
+                            end
+                            if test "$debug_enabled" = "true"
                             echo "DEBUG wrapper: branch=$branch" >&2
+                            end
+                            if test "$debug_enabled" = "true"
                             echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >&2
+                            end
+                            if test "$debug_enabled" = "true"
                             echo "DEBUG wrapper: Command: tmux new-session -s '$session_name' -c '$worktree_path' claude $claude_args" >&2
+                            end
                             tmux new-session -s "$session_name" -c "$worktree_path" claude $claude_args
                         else
                             # Fallback: start with shell and show message

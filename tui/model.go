@@ -659,6 +659,12 @@ func (m Model) deleteWorktree(path, branch string, force bool) tea.Cmd {
 			return worktreeDeletedMsg{err: err}
 		}
 
+		// Clean up branch-specific config data (PRs, Claude initialization, etc.)
+		// This prevents config file bloat and removes stale references
+		if m.configManager != nil {
+			_ = m.configManager.CleanupBranch(m.repoPath, branch) // Ignore error, not critical
+		}
+
 		// Then kill the associated tmux sessions if they exist
 		// Kill Claude session
 		sessionName := m.sessionManager.SanitizeName(branch)
@@ -1289,6 +1295,11 @@ func (m Model) filterBranches(query string) []string {
 // GetSwitchInfo returns the switch information (for shell integration)
 func (m Model) GetSwitchInfo() SwitchInfo {
 	return m.switchInfo
+}
+
+// GetConfigManager returns the config manager for access from main.go
+func (m Model) GetConfigManager() *config.Manager {
+	return m.configManager
 }
 
 // loadSessions loads tmux sessions for the current repository only

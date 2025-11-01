@@ -1351,41 +1351,48 @@ func (m Model) renderSettingsModal() string {
 	b.WriteString(helpStyle.Render("Configure gcool settings for this repository"))
 	b.WriteString("\n\n")
 
-	// Define settings options
+	// Define settings options (without computing current values yet)
 	settings := []struct {
 		name        string
 		key         string
 		description string
-		current     string
+		getCurrent  func() string // Function to get current value dynamically
 	}{
 		{
 			name:        "Editor",
 			key:         "e",
 			description: "Default editor for opening worktrees",
-			current: func() string {
+			getCurrent: func() string {
 				if m.configManager != nil {
 					return m.configManager.GetEditor(m.repoPath)
 				}
 				return "code"
-			}(),
+			},
 		},
 		{
 			name:        "Theme",
 			key:         "h",
 			description: "Change UI theme (matrix, coolify, dracula, nord, solarized)",
-			current:     m.configManager.GetTheme(m.repoPath),
+			getCurrent: func() string {
+				if m.configManager != nil {
+					return m.configManager.GetTheme(m.repoPath)
+				}
+				return "matrix"
+			},
 		},
 		{
 			name:        "Base Branch",
 			key:         "c",
 			description: "Base branch for creating new worktrees",
-			current:     m.baseBranch,
+			getCurrent: func() string {
+				return m.baseBranch
+			},
 		},
 		{
 			name:        "Tmux Config",
 			key:         "t",
 			description: "Add/remove gcool tmux config to ~/.tmux.conf",
-			current: func() string {
+			getCurrent: func() string {
 				if m.sessionManager != nil {
 					hasConfig, err := m.sessionManager.HasGcoolTmuxConfig()
 					if err == nil && hasConfig {
@@ -1393,18 +1400,31 @@ func (m Model) renderSettingsModal() string {
 					}
 				}
 				return "Not installed"
-			}(),
+			},
 		},
 		{
 			name:        "AI Integration",
 			key:         "a",
 			description: "Configure OpenRouter API for AI-powered commit messages and branch names",
-			current: func() string {
+			getCurrent: func() string {
 				if m.configManager != nil && m.configManager.GetOpenRouterAPIKey() != "" {
 					return "Configured"
 				}
 				return "Not configured"
-			}(),
+			},
+		},
+		{
+			name:        "Debug Logs",
+			key:         "d",
+			description: "Enable/disable debug logging to /tmp/gcool-*.log files",
+			getCurrent: func() string {
+				if m.configManager != nil {
+					if m.configManager.GetDebugLoggingEnabled() {
+						return "Enabled"
+					}
+				}
+				return "Disabled"
+			},
 		},
 	}
 
@@ -1423,7 +1443,7 @@ func (m Model) renderSettingsModal() string {
 		if i == m.settingsIndex {
 			b.WriteString(helpStyle.Render(fmt.Sprintf("    %s", setting.description)))
 			b.WriteString("\n")
-			b.WriteString(helpStyle.Render(fmt.Sprintf("    Current: %s", setting.current)))
+			b.WriteString(helpStyle.Render(fmt.Sprintf("    Current: %s", setting.getCurrent())))
 			b.WriteString("\n")
 		}
 	}

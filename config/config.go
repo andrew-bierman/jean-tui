@@ -16,6 +16,7 @@ type Config struct {
 	OpenRouterModel     string                 `json:"openrouter_model,omitempty"` // OpenRouter model, "" = default haiku
 	AICommitEnabled     bool                   `json:"ai_commit_enabled,omitempty"` // Enable AI commit message generation
 	AIBranchNameEnabled bool                   `json:"ai_branch_name_enabled,omitempty"` // Enable AI branch name generation
+	DebugLoggingEnabled bool                   `json:"debug_logging_enabled"` // Enable debug logging to temp files
 }
 
 // PRInfo represents information about a pull request
@@ -305,6 +306,17 @@ func (m *Manager) SetAIBranchNameEnabled(enabled bool) error {
 	return m.save()
 }
 
+// GetDebugLoggingEnabled returns whether debug logging is enabled
+func (m *Manager) GetDebugLoggingEnabled() bool {
+	return m.config.DebugLoggingEnabled
+}
+
+// SetDebugLoggingEnabled sets whether debug logging is enabled
+func (m *Manager) SetDebugLoggingEnabled(enabled bool) error {
+	m.config.DebugLoggingEnabled = enabled
+	return m.save()
+}
+
 // GetPRs returns all pull requests for a given branch
 func (m *Manager) GetPRs(repoPath, branch string) []PRInfo {
 	if repo, ok := m.config.Repositories[repoPath]; ok {
@@ -417,12 +429,44 @@ func (m *Manager) SetClaudeInitialized(repoPath, branch string) error {
 	}
 
 	repo.InitializedClaudes[branch] = true
-	fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized called for repo=%q branch=%q\n", repoPath, branch)
+	// Only log debug info if debug logging is enabled
+	if os.Getenv("GCOOL_DEBUG_ENABLED") == "true" {
+		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized called for repo=%q branch=%q\n", repoPath, branch)
+	}
 	err := m.save()
-	if err != nil {
+	if err != nil && os.Getenv("GCOOL_DEBUG_ENABLED") == "true" {
 		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized FAILED: %v\n", err)
-	} else {
+	} else if err == nil && os.Getenv("GCOOL_DEBUG_ENABLED") == "true" {
 		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized SUCCESS\n")
 	}
 	return err
+}
+
+// CleanupBranch removes all branch-specific data from config when a worktree is deleted
+// This includes:
+// - All pull requests for the branch
+// - Claude initialization flag
+// - Last selected branch reference (if it matches the deleted branch)
+func (m *Manager) CleanupBranch(repoPath, branch string) error {
+	repo, ok := m.config.Repositories[repoPath]
+	if !ok {
+		return nil // Nothing to clean up
+	}
+
+	// Remove all PRs for this branch
+	if repo.PRs != nil {
+		delete(repo.PRs, branch)
+	}
+
+	// Remove Claude initialization flag for this branch
+	if repo.InitializedClaudes != nil {
+		delete(repo.InitializedClaudes, branch)
+	}
+
+	// Clear last selected branch if it matches the deleted branch
+	if repo.LastSelectedBranch == branch {
+		repo.LastSelectedBranch = ""
+	}
+
+	return m.save()
 }

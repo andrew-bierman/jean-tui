@@ -54,7 +54,8 @@ The application follows a clean separation of concerns:
   - `tmux.go`: Session creation, attachment, listing, and lifecycle management
 - **config/**: User configuration persistence
   - `config.go`: Manages base branch settings per repository in `~/.config/gcool/config.json`
-- **shell/**: Shell integration wrappers for bash/zsh/fish
+- **install/**: Installation utilities and shell wrapper templates
+  - `templates.go`: Embedded shell wrapper templates (BashZshWrapper, FishWrapper) compiled into binary
 
 ### Detailed File Structure
 

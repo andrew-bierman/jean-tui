@@ -13,8 +13,12 @@ import (
 	"github.com/coollabsio/gcool/git"
 )
 
-// debugLog writes a message to the debug log file
-func debugLog(msg string) {
+// debugLog writes a message to the debug log file if debug logging is enabled
+func (m Model) debugLog(msg string) {
+	// Check if debug logging is enabled in config
+	if m.configManager == nil || !m.configManager.GetDebugLoggingEnabled() {
+		return
+	}
 	if f, err := os.OpenFile("/tmp/gcool-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 		fmt.Fprintf(f, "%s\n", msg)
 		f.Close()
@@ -43,13 +47,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case worktreesLoadedMsg:
 		if msg.err != nil {
-			debugLog(fmt.Sprintf("Failed to load worktrees: %v", msg.err))
+			m.debugLog(fmt.Sprintf("Failed to load worktrees: %v", msg.err))
 			cmd = m.showErrorNotification("Failed to load worktrees", 4*time.Second)
 			return m, cmd
 		} else {
-			debugLog(fmt.Sprintf("Worktrees loaded: %d worktrees", len(msg.worktrees)))
+			m.debugLog(fmt.Sprintf("Worktrees loaded: %d worktrees", len(msg.worktrees)))
 			for i, wt := range msg.worktrees {
-				debugLog(fmt.Sprintf("  [%d] %s - HasUncommitted: %v", i, wt.Branch, wt.HasUncommitted))
+				m.debugLog(fmt.Sprintf("  [%d] %s - HasUncommitted: %v", i, wt.Branch, wt.HasUncommitted))
 			}
 			m.worktrees = msg.worktrees
 
@@ -57,10 +61,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i := range m.worktrees {
 				if m.configManager != nil {
 					prs := m.configManager.GetPRs(m.repoPath, m.worktrees[i].Branch)
-					debugLog(fmt.Sprintf("  Loaded %d PRs for branch %s", len(prs), m.worktrees[i].Branch))
+					m.debugLog(fmt.Sprintf("  Loaded %d PRs for branch %s", len(prs), m.worktrees[i].Branch))
 					if len(prs) > 0 {
 						for _, pr := range prs {
-							debugLog(fmt.Sprintf("    PR: %s (Status: %s)", pr.URL, pr.Status))
+							m.debugLog(fmt.Sprintf("    PR: %s (Status: %s)", pr.URL, pr.Status))
 						}
 					}
 					m.worktrees[i].PRs = prs
@@ -262,7 +266,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case prCreatedMsg:
 		if msg.err != nil {
-			debugLog(fmt.Sprintf("PR creation failed: %v", msg.err))
+			m.debugLog(fmt.Sprintf("PR creation failed: %v", msg.err))
 			errMsg := msg.err.Error()
 
 			// Check if the error is "PR already exists"
@@ -304,7 +308,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.prRetryTitle = ""
 			m.prRetryDescription = ""
 
-			debugLog(fmt.Sprintf("PR created successfully: %s", msg.prURL))
+			m.debugLog(fmt.Sprintf("PR created successfully: %s", msg.prURL))
 			// Find the worktree branch for this PR
 			var prBranch string
 			for _, wt := range m.worktrees {
@@ -324,13 +328,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-			debugLog(fmt.Sprintf("Saving PR for branch: %s", prBranch))
+			m.debugLog(fmt.Sprintf("Saving PR for branch: %s", prBranch))
 			// Save PR to config
 			if prBranch != "" {
 				_ = m.configManager.AddPR(m.repoPath, prBranch, msg.prURL)
 			}
 
-			debugLog("Triggering worktree refresh after PR creation")
+			m.debugLog("Triggering worktree refresh after PR creation")
 			cmd = m.showSuccessNotification("PR created / updated: " + msg.prURL, 5*time.Second)
 			return m, tea.Batch(
 				cmd,
@@ -449,11 +453,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commitCreatedMsg:
 		if msg.err != nil {
-			debugLog(fmt.Sprintf("Commit creation failed: %v", msg.err))
+			m.debugLog(fmt.Sprintf("Commit creation failed: %v", msg.err))
 			cmd = m.showErrorNotification("Failed to create commit: " + msg.err.Error(), 4*time.Second)
 			return m, cmd
 		} else {
-			debugLog(fmt.Sprintf("Commit created successfully with hash: %s", msg.commitHash))
+			m.debugLog(fmt.Sprintf("Commit created successfully with hash: %s", msg.commitHash))
 			// Clear commit modal inputs for next use
 			m.commitSubjectInput.SetValue("")
 			m.commitBodyInput.SetValue("")
@@ -530,7 +534,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Normal commit (not before PR)
-			debugLog("Triggering worktree refresh after commit")
+			m.debugLog("Triggering worktree refresh after commit")
 			return m, tea.Batch(
 				cmd,
 				m.loadWorktrees(),
@@ -1175,7 +1179,7 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "t":
 		// Open terminal in a separate tmux session (not the Claude session)
-		debugLog("DEBUG: 't' keybinding pressed, TerminalOnly=true")
+		m.debugLog("DEBUG: 't' keybinding pressed, TerminalOnly=true")
 		if wt := m.selectedWorktree(); wt != nil {
 			// Save the last selected branch before switching
 			if m.configManager != nil {
@@ -1190,11 +1194,11 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				TerminalOnly: true,      // Signal this is a terminal session
 			}
 			m.ensuringWorktree = true
-			debugLog("DEBUG: ensuring worktree exists before opening terminal")
+			m.debugLog("DEBUG: ensuring worktree exists before opening terminal")
 			cmd = m.showInfoNotification("Preparing workspace...")
 			return m, tea.Batch(cmd, m.ensureWorktreeExists(wt.Path, wt.Branch))
 		}
-		debugLog("DEBUG: 't' pressed but no worktree selected")
+		m.debugLog("DEBUG: 't' pressed but no worktree selected")
 
 	case "o":
 		// Open worktree in default IDE
@@ -2356,7 +2360,7 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down":
-		if m.settingsIndex < 4 { // Now 5 settings (editor, theme, base branch, tmux config, AI integration)
+		if m.settingsIndex < 5 { // Now 6 settings (editor, theme, base branch, tmux config, AI integration, debug logs)
 			m.settingsIndex++
 		}
 
@@ -2387,6 +2391,12 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a":
 		// Quick key for AI Integration
 		m.settingsIndex = 4
+		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		return m.handleSettingsModalInput(msg)
+
+	case "d":
+		// Quick key for Debug Logs
+		m.settingsIndex = 5
 		msg = tea.KeyMsg{Type: tea.KeyEnter}
 		return m.handleSettingsModalInput(msg)
 
@@ -2457,6 +2467,24 @@ func (m Model) handleSettingsModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.aiSettingsIndex = 0
 			m.aiAPIKeyInput.Focus()
 			m.aiModalStatus = "" // Clear any previous status
+			return m, nil
+
+		case 5:
+			// Debug Logs setting - toggle debug logging
+			if m.configManager != nil {
+				enabled := m.configManager.GetDebugLoggingEnabled()
+				if err := m.configManager.SetDebugLoggingEnabled(!enabled); err != nil {
+					cmd := m.showErrorNotification("Failed to save debug logs setting: "+err.Error(), 3*time.Second)
+					return m, cmd
+				}
+				if !enabled {
+					cmd := m.showSuccessNotification("Debug logging enabled", 2*time.Second)
+					return m, cmd
+				} else {
+					cmd := m.showSuccessNotification("Debug logging disabled", 2*time.Second)
+					return m, cmd
+				}
+			}
 			return m, nil
 		}
 	}

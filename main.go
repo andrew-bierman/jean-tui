@@ -19,8 +19,14 @@ import (
 
 const version = "0.1.0"
 
-// debugLog writes a message to the debug log file
+// Global flag for debug logging (set after config is loaded)
+var debugLoggingEnabled bool = false
+
+// debugLog writes a message to the debug log file if logging is enabled
 func debugLog(msg string) {
+	if !debugLoggingEnabled {
+		return
+	}
 	if f, err := os.OpenFile("/tmp/gcool-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 		fmt.Fprintf(f, "%s\n", msg)
 		f.Close()
@@ -111,6 +117,12 @@ func main() {
 
 	// Create and run TUI
 	model := tui.NewModel(repoPath, autoClaude)
+
+	// Enable debug logging if configured
+	if model.GetConfigManager() != nil {
+		debugLoggingEnabled = model.GetConfigManager().GetDebugLoggingEnabled()
+	}
+
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	finalModel, err := p.Run()

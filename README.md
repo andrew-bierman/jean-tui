@@ -115,13 +115,12 @@ gcool init --remove
 
 ### Manual Installation (Optional)
 
-If you prefer to set up the wrapper manually or have a shell not supported by `gcool init`:
+If you prefer to set up the wrapper manually or have a shell not supported by `gcool init`, you can view the wrapper functions embedded in `install/templates.go`:
 
-**Bash / Zsh:**
-Copy the function from `shell/gcool-wrapper.sh` to your `~/.bashrc` or `~/.zshrc`
+- **BashZshWrapper** constant: Bash/Zsh shell wrapper
+- **FishWrapper** constant: Fish shell wrapper
 
-**Fish:**
-Copy the function from `shell/gcool-wrapper.fish` to your `~/.config/fish/config.fish`
+These templates are automatically compiled into the gcool binary and deployed by `gcool init`.
 
 ## Usage
 
@@ -500,9 +499,8 @@ gcool/
 │   ├── update.go        # Event handling, keybindings, state transitions
 │   ├── view.go          # UI rendering, modal renderers
 │   └── styles.go        # Lipgloss styling definitions
-└── shell/               # Shell integration wrappers
-    ├── gcool-wrapper.sh   # Bash/Zsh wrapper for directory switching
-    └── gcool-wrapper.fish # Fish wrapper for directory switching
+└── install/             # Installation and shell wrapper templates
+    └── templates.go     # Shell wrapper templates (BashZshWrapper, FishWrapper)
 ```
 
 ### Key Architectural Patterns
