@@ -57,6 +57,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.worktrees = msg.worktrees
 
+			// Mark initialization as complete after first successful worktree load
+			m.isInitializing = false
+
 			// Load PRs from config for each worktree
 			for i := range m.worktrees {
 				if m.configManager != nil {
@@ -231,10 +234,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case baseBranchLoadedMsg:
 		m.baseBranch = msg.branch
 		// Load worktrees immediately (without status), then fetch in background
-		return m, tea.Batch(
-			m.loadWorktreesLightweight(), // Shows list immediately
-			m.refreshWithPull(),           // Fetches + triggers reload with status
-		)
+		// Don't call refreshWithPull() initially - just load the list without notifications
+		// The fetch will happen silently on the first worktree load
+		return m, m.loadWorktreesLightweight()
 
 	case notificationHideMsg:
 		// Only handle if this is the current notification
@@ -752,8 +754,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.showErrorNotification("Failed to refresh: " + msg.err.Error(), 5*time.Second)
 			return m, cmd
 		} else {
-			// Build detailed status message based on what was pulled
-			cmd = m.showSuccessNotification(buildRefreshStatusMessage(msg), 3*time.Second)
+			// Only show notification if not initializing (suppress during startup)
+			if !m.isInitializing {
+				cmd = m.showSuccessNotification(buildRefreshStatusMessage(msg), 3*time.Second)
+			}
 			// Reload worktree list to show updated status
 			return m, tea.Batch(
 				cmd,
