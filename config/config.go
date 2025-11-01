@@ -34,6 +34,7 @@ type RepoConfig struct {
 	AutoFetchInterval  int               `json:"auto_fetch_interval,omitempty"` // in seconds, 0 = use default (10s)
 	Theme              string            `json:"theme,omitempty"`               // Per-repo theme override, "" = use global default
 	PRs                map[string][]PRInfo `json:"prs,omitempty"`                 // branch -> list of PRs
+	InitializedClaudes map[string]bool   `json:"initialized_claudes,omitempty"` // branch -> whether Claude has been started
 }
 
 // Manager handles configuration loading and saving
@@ -388,4 +389,40 @@ func (m *Manager) RemovePR(repoPath, branch, url string) error {
 func (m *Manager) HasPRs(repoPath, branch string) bool {
 	prs := m.GetPRs(repoPath, branch)
 	return len(prs) > 0
+}
+
+// IsClaudeInitialized checks if a Claude session has been initialized for a branch
+func (m *Manager) IsClaudeInitialized(repoPath, branch string) bool {
+	if repo, ok := m.config.Repositories[repoPath]; ok {
+		if repo.InitializedClaudes != nil {
+			return repo.InitializedClaudes[branch]
+		}
+	}
+	return false
+}
+
+// SetClaudeInitialized marks a branch as having an initialized Claude session
+func (m *Manager) SetClaudeInitialized(repoPath, branch string) error {
+	if m.config.Repositories == nil {
+		m.config.Repositories = make(map[string]*RepoConfig)
+	}
+
+	if _, ok := m.config.Repositories[repoPath]; !ok {
+		m.config.Repositories[repoPath] = &RepoConfig{}
+	}
+
+	repo := m.config.Repositories[repoPath]
+	if repo.InitializedClaudes == nil {
+		repo.InitializedClaudes = make(map[string]bool)
+	}
+
+	repo.InitializedClaudes[branch] = true
+	fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized called for repo=%q branch=%q\n", repoPath, branch)
+	err := m.save()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized FAILED: %v\n", err)
+	} else {
+		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized SUCCESS\n")
+	}
+	return err
 }

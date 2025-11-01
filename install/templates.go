@@ -6,6 +6,8 @@ const BashZshWrapper = `# BEGIN GCOOL INTEGRATION
 # Source this in your shell rc file to enable gcool with directory switching
 
 gcool() {
+    local debug_log="/tmp/gcool-wrapper-debug.log"
+    echo "DEBUG wrapper: gcool function called with args: $@" >> "$debug_log"
     # Loop until user explicitly quits gcool (not just detaches from tmux)
     while true; do
         # Save current PATH to restore it later
@@ -25,15 +27,17 @@ gcool() {
 
         # Check if switch info was written
         if [ -f "$temp_file" ] && [ -s "$temp_file" ]; then
+        echo "DEBUG wrapper: switch file exists and has content" >> "$debug_log"
         # Read the switch info: path|branch|auto-claude|terminal-only|script-command|claude-session-name
         local switch_info=$(cat "$temp_file")
+        echo "DEBUG wrapper: switch_info=$switch_info" >> "$debug_log"
         # Only remove if it's in /tmp (safety check)
         if [[ "$temp_file" == /tmp/* ]] || [[ "$temp_file" == /var/folders/* ]]; then
             rm "$temp_file"
         fi
 
         # Parse the info (using worktree_path instead of path to avoid PATH conflict)
-        IFS='|' read -r worktree_path branch auto_claude terminal_only script_command claude_session_name <<< "$switch_info"
+        IFS='|' read -r worktree_path branch auto_claude terminal_only script_command claude_session_name is_claude_initialized <<< "$switch_info"
 
         # Check if we got valid data (has at least two pipes)
         if [[ "$switch_info" == *"|"*"|"* ]]; then
@@ -80,35 +84,34 @@ gcool() {
                 # Terminal-only sessions always use shell, never Claude
                 if [ "$terminal_only" = "true" ]; then
                     # Always start with shell for terminal sessions
-                    echo "DEBUG wrapper: Creating terminal-only session: $session_name" >&2
+                    echo "DEBUG wrapper: Creating terminal-only session: $session_name" >> "$debug_log"
                     tmux new-session -d -s "$session_name" -c "$worktree_path"
                 elif [ "$auto_claude" = "true" ]; then
                     # Check if claude is available
                     if command -v claude >/dev/null 2>&1; then
                         # Create detached session with claude in plan mode
-                        # Use --session flag for persistent sessions (use claude_session_name if provided, otherwise branch name)
-                        local claude_session="${claude_session_name:-$branch}"
-
-                        echo "DEBUG wrapper: Creating Claude session with --session flag" >&2
-                        echo "DEBUG wrapper: tmux_session_name=$session_name" >&2
-                        echo "DEBUG wrapper: branch=$branch" >&2
-                        echo "DEBUG wrapper: claude_session_name_provided=$claude_session_name" >&2
-                        echo "DEBUG wrapper: claude_session (final)=$claude_session" >&2
-                        echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' claude --session '$claude_session' --permission-mode plan" >&2
-                        tmux new-session -d -s "$session_name" -c "$worktree_path" claude --session "$claude_session" --permission-mode plan
-                        sleep 1
-                        echo "DEBUG wrapper: Checking process:" >&2
-                        ps aux | grep -E "claude.*--session" | grep -v grep >&2
+                        # Use --continue on subsequent runs to resume previous conversations
+                        echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >> "$debug_log"
+                        echo "DEBUG wrapper: tmux_session_name=$session_name" >> "$debug_log"
+                        echo "DEBUG wrapper: branch=$branch" >> "$debug_log"
+                        echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >> "$debug_log"
+                        if [ "$is_claude_initialized" = "true" ]; then
+                            echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --continue --permission-mode plan'" >> "$debug_log"
+                            tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --continue --permission-mode plan"
+                        else
+                            echo "DEBUG wrapper: Command: tmux new-session -d -s '$session_name' -c '$worktree_path' bash -c 'exec claude --permission-mode plan'" >> "$debug_log"
+                            tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --permission-mode plan"
+                        fi
                     else
                         # Fallback: create detached session with shell and show message
-                        echo "DEBUG wrapper: Claude not found, creating shell session" >&2
+                        echo "DEBUG wrapper: Claude not found, creating shell session" >> "$debug_log"
                         tmux new-session -d -s "$session_name" -c "$worktree_path" \; \
                             send-keys "echo 'Note: Claude CLI not found. Install it or use --no-claude flag.'" C-m \; \
                             send-keys "echo 'You are in: $worktree_path'" C-m
                     fi
                 else
                     # Create detached session with shell
-                    echo "DEBUG wrapper: Creating shell session: $session_name" >&2
+                    echo "DEBUG wrapper: Creating shell session: $session_name" >> "$debug_log"
                     tmux new-session -d -s "$session_name" -c "$worktree_path"
                 fi
 
@@ -172,6 +175,10 @@ function gcool
                 if test (count $parts) -ge 6
                     set claude_session_name $parts[6]
                 end
+                set is_claude_initialized "false"
+                if test (count $parts) -ge 8
+                    set is_claude_initialized $parts[8]
+                end
 
                 # Check if tmux is available
                 if not command -v tmux &> /dev/null
@@ -216,19 +223,17 @@ function gcool
                         # Check if claude is available
                         if command -v claude &> /dev/null
                             # Start with claude in plan mode
-                            # Use --session flag for persistent sessions (use claude_session_name if provided, otherwise branch name)
-                            set claude_session "$claude_session_name"
-                            if test -z "$claude_session"
-                                set claude_session "$branch"
+                            # Use --continue on subsequent runs to resume previous conversations
+                            set claude_args "--permission-mode plan"
+                            if test "$is_claude_initialized" = "true"
+                                set claude_args "--continue --permission-mode plan"
                             end
-
-                            echo "DEBUG wrapper: Creating Claude session with --session flag" >&2
+                            echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >&2
                             echo "DEBUG wrapper: tmux_session_name=$session_name" >&2
                             echo "DEBUG wrapper: branch=$branch" >&2
-                            echo "DEBUG wrapper: claude_session_name_provided=$claude_session_name" >&2
-                            echo "DEBUG wrapper: claude_session (final)=$claude_session" >&2
-                            echo "DEBUG wrapper: Command: tmux new-session -s '$session_name' -c '$worktree_path' claude --session '$claude_session' --permission-mode plan" >&2
-                            tmux new-session -s "$session_name" -c "$worktree_path" claude --session "$claude_session" --permission-mode plan
+                            echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >&2
+                            echo "DEBUG wrapper: Command: tmux new-session -s '$session_name' -c '$worktree_path' claude $claude_args" >&2
+                            tmux new-session -s "$session_name" -c "$worktree_path" claude $claude_args
                         else
                             # Fallback: start with shell and show message
                             tmux new-session -s "$session_name" -c "$worktree_path"

@@ -35,6 +35,10 @@ function gcool
                 if test (count $parts) -ge 6
                     set claude_session_name $parts[6]
                 end
+                set is_claude_initialized "false"
+                if test (count $parts) -ge 8
+                    set is_claude_initialized $parts[8]
+                end
 
                 # Check if tmux is available
                 if not command -v tmux &> /dev/null
@@ -79,19 +83,16 @@ function gcool
                         # Check if claude is available
                         if command -v claude &> /dev/null
                             # Start with claude in plan mode
-                            # Use --session flag for persistent sessions (use claude_session_name if provided, otherwise branch name)
-                            set claude_session "$claude_session_name"
-                            if test -z "$claude_session"
-                                set claude_session "$branch"
-                            end
-
-                            echo "DEBUG wrapper: Creating Claude session with --session flag" >&2
+                            # Use --continue on subsequent runs to resume previous conversations
+                            echo "DEBUG wrapper: Creating Claude session in: $worktree_path" >&2
                             echo "DEBUG wrapper: tmux_session_name=$session_name" >&2
                             echo "DEBUG wrapper: branch=$branch" >&2
-                            echo "DEBUG wrapper: claude_session_name_provided=$claude_session_name" >&2
-                            echo "DEBUG wrapper: claude_session (final)=$claude_session" >&2
-                            echo "DEBUG wrapper: Command: tmux new-session -s '$session_name' -c '$worktree_path' claude --session '$claude_session' --permission-mode plan" >&2
-                            tmux new-session -s "$session_name" -c "$worktree_path" claude --session "$claude_session" --permission-mode plan
+                            echo "DEBUG wrapper: is_claude_initialized=$is_claude_initialized" >&2
+                            if test "$is_claude_initialized" = "true"
+                                tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --continue --permission-mode plan"
+                            else
+                                tmux new-session -d -s "$session_name" -c "$worktree_path" bash -c "exec claude --permission-mode plan"
+                            end
                         else
                             # Fallback: start with shell and show message
                             tmux new-session -s "$session_name" -c "$worktree_path"

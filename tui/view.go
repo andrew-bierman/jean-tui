@@ -503,7 +503,7 @@ func (m Model) renderCreateWithNameModal() string {
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render(fmt.Sprintf("  Branch: %s", sanitizedName)))
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render(fmt.Sprintf("  Claude session: --session %s", sanitizedName)))
+	b.WriteString(helpStyle.Render(fmt.Sprintf("  Claude will automatically continue previous conversations")))
 
 	// Show sanitization notice if name was changed
 	if sanitizedName != sessionName && sessionName != "" {

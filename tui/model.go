@@ -32,12 +32,13 @@ type scriptOutputBuffer struct {
 
 // SwitchInfo contains information about the worktree to switch to
 type SwitchInfo struct {
-	Path           string
-	Branch         string
-	AutoClaude     bool
-	TerminalOnly   bool   // If true, open terminal session instead of Claude session
-	ScriptCommand  string // If set, run this script command instead of shell/Claude
-	SessionName    string // Custom name for Claude session (for --session flag)
+	Path                 string
+	Branch               string
+	AutoClaude           bool
+	TerminalOnly         bool   // If true, open terminal session instead of Claude session
+	ScriptCommand        string // If set, run this script command instead of shell/Claude
+	SessionName          string // Custom name for Claude session (for --session flag)
+	IsClaudeInitialized  bool   // Whether this Claude session has been initialized before
 }
 
 // ScriptExecution represents a running or completed script

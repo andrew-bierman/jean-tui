@@ -1089,14 +1089,25 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.configManager != nil {
 				_ = m.configManager.SetLastSelectedBranch(m.repoPath, wt.Branch)
 			}
+			// Check if this Claude session has been initialized before
+			isInitialized := false
+			if m.configManager != nil {
+				isInitialized = m.configManager.IsClaudeInitialized(m.repoPath, wt.Branch)
+				// Mark this branch as initialized for next time
+				// (so next run will use --continue instead of plain claude)
+				if m.autoClaude && !isInitialized {
+					_ = m.configManager.SetClaudeInitialized(m.repoPath, wt.Branch)
+				}
+			}
 			// Store pending switch info and ensure worktree exists
 			// SessionName is the branch name (used for persistent Claude sessions)
 			m.pendingSwitchInfo = &SwitchInfo{
-				Path:        wt.Path,
-				Branch:      wt.Branch,
-				SessionName: wt.Branch, // Use branch name as session name for Claude
-				AutoClaude:  m.autoClaude,
-				TerminalOnly: false, // Explicitly use Claude session, not terminal-only
+				Path:                 wt.Path,
+				Branch:               wt.Branch,
+				SessionName:          wt.Branch, // Use branch name as session name for Claude
+				AutoClaude:           m.autoClaude,
+				TerminalOnly:         false, // Explicitly use Claude session, not terminal-only
+				IsClaudeInitialized:  isInitialized,
 			}
 			m.ensuringWorktree = true
 			cmd = m.showInfoNotification("Preparing workspace...")
@@ -1754,8 +1765,8 @@ func (m Model) handleCreateWithNameModalInput(msg tea.KeyMsg) (tea.Model, tea.Cm
 
 			m.modal = noModal
 			m.sessionNameInput.Blur()
-			debugMsg := fmt.Sprintf("DEBUG: Creating worktree\n  Branch/Session: %s\n  Path: %s", sanitizedName, path)
-			cmd := m.showInfoNotification("Creating worktree with session: " + sanitizedName + "\n\n" + debugMsg)
+			debugMsg := fmt.Sprintf("DEBUG: Creating worktree\n  Branch: %s\n  Path: %s\n  Claude will automatically continue previous conversations", sanitizedName, path)
+			cmd := m.showInfoNotification("Creating worktree: " + sanitizedName + "\n\n" + debugMsg)
 			return m, tea.Batch(cmd, m.createWorktreeWithSession(path, sanitizedName, true))
 		} else {
 			// Cancel button (modalFocused == 2)
