@@ -62,6 +62,22 @@ func (m *Manager) SessionExists(sessionName string) bool {
 	return err == nil
 }
 
+// isClaudeAvailable checks if the claude command is available in PATH
+func (m *Manager) isClaudeAvailable() bool {
+	cmd := exec.Command("sh", "-c", "command -v claude")
+	err := cmd.Run()
+	return err == nil
+}
+
+// buildClaudeCommand constructs the proper claude command with flags
+// isInitialized determines whether to use --continue flag
+func (m *Manager) buildClaudeCommand(isInitialized bool) string {
+	if isInitialized {
+		return "claude --continue --permission-mode plan"
+	}
+	return "claude --permission-mode plan"
+}
+
 // CreateOrAttach creates a new session or attaches to existing one
 // targetWindow specifies which window to attach to: "terminal" (window 0) or "claude" (window 1)
 // Always creates both windows when creating a new session
@@ -89,7 +105,16 @@ func (m *Manager) Create(sessionName, path string, autoStartClaude bool, targetW
 
 	// Create window 2 (claude) if autoStartClaude is true
 	if autoStartClaude {
-		cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude", "claude")
+		if m.isClaudeAvailable() {
+			// Claude is available - create window with proper flags
+			// Use --permission-mode plan (shell wrapper handles --continue for initialized sessions)
+			claudeCmd := m.buildClaudeCommand(false)
+			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude", claudeCmd)
+		} else {
+			// Claude not available - create shell window as fallback
+			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude")
+		}
+
 		if err := cmd.Run(); err != nil {
 			// Window creation failed, but session exists, so we continue
 			// The user can manually create the window later
@@ -110,7 +135,12 @@ func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool,
 	if targetWindow == "claude" {
 		windowIndex = "2"
 		windowName = "claude"
-		windowCommand = "claude"
+		// Use proper claude command with flags, or fallback to shell
+		if m.isClaudeAvailable() {
+			windowCommand = m.buildClaudeCommand(false)
+		} else {
+			windowCommand = "" // Fallback to shell
+		}
 	} else {
 		windowIndex = "1"
 		windowName = "terminal"
@@ -133,10 +163,12 @@ func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool,
 
 		// If window doesn't exist, create it
 		if !windowExists {
-			if targetWindow == "claude" {
+			if windowCommand != "" {
+				// Create window with specific command
 				cmd := exec.Command("tmux", "new-window", "-t", sessionName+":"+windowIndex, "-c", path, "-n", windowName, windowCommand)
 				cmd.Run() // Ignore errors, window might be created concurrently
 			} else {
+				// Create shell window
 				cmd := exec.Command("tmux", "new-window", "-t", sessionName+":"+windowIndex, "-c", path, "-n", windowName)
 				cmd.Run() // Ignore errors
 			}
