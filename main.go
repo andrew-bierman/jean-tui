@@ -154,7 +154,6 @@ func main() {
 			// Debug: log what we're writing
 			debugLog(fmt.Sprintf("DEBUG main: switchInfo={Path:%q Branch:%q AutoClaude:%v TargetWindow:%q SessionName:%q}", switchInfo.Path, switchInfo.Branch, switchInfo.AutoClaude, switchInfo.TargetWindow, switchInfo.SessionName))
 			debugLog(fmt.Sprintf("DEBUG main: switchData=%q (has %d fields)", switchData, strings.Count(switchData, "|")+1))
-			fmt.Fprintf(os.Stderr, "DEBUG main: SessionName=%q\n", switchInfo.SessionName)
 
 			// Check if we should write to a file (for shell wrapper integration)
 			if switchFile := os.Getenv("JEAN_SWITCH_FILE"); switchFile != "" {

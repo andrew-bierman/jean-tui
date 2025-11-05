@@ -455,17 +455,7 @@ func (m *Manager) SetClaudeInitialized(repoPath, branch string) error {
 	}
 
 	repo.InitializedClaudes[branch] = true
-	// Only log debug info if debug logging is enabled
-	if os.Getenv("JEAN_DEBUG_ENABLED") == "true" {
-		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized called for repo=%q branch=%q\n", repoPath, branch)
-	}
-	err := m.save()
-	if err != nil && os.Getenv("JEAN_DEBUG_ENABLED") == "true" {
-		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized FAILED: %v\n", err)
-	} else if err == nil && os.Getenv("JEAN_DEBUG_ENABLED") == "true" {
-		fmt.Fprintf(os.Stderr, "DEBUG config: SetClaudeInitialized SUCCESS\n")
-	}
-	return err
+	return m.save()
 }
 
 // CleanupBranch removes all branch-specific data from config when a worktree is deleted

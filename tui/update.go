@@ -2097,8 +2097,8 @@ func (m Model) handleCreateWithNameModalInput(msg tea.KeyMsg) (tea.Model, tea.Cm
 
 			m.modal = noModal
 			m.sessionNameInput.Blur()
-			debugMsg := fmt.Sprintf("DEBUG: Creating worktree\n  Branch: %s\n  Path: %s\n  Claude will automatically continue previous conversations", sanitizedName, path)
-			cmd := m.showInfoNotification("Creating worktree: " + sanitizedName + "\n\n" + debugMsg)
+			notificationMsg := fmt.Sprintf("Creating worktree: %s\n  Path: %s\n  Claude will automatically continue previous conversations", sanitizedName, path)
+			cmd := m.showInfoNotification(notificationMsg)
 			return m, tea.Batch(cmd, m.createWorktreeWithSession(path, sanitizedName, true))
 		} else {
 			// Cancel button (modalFocused == 2)
