@@ -4,26 +4,18 @@ package openrouter
 // These can be overridden by user-customized prompts in the config
 
 const (
-	// DefaultCommitPrompt generates a one-line conventional commit message from git diff
-	// The {diff} placeholder will be replaced with the actual git diff
-	DefaultCommitPrompt = `Generate a one-line conventional commit message for the following git diff.
+	// DefaultCommitPrompt generates a one-line conventional commit message from git context
+	// Placeholders: {status}, {diff}, {branch}, {log}
+	DefaultCommitPrompt = `## Context
 
-Return ONLY the commit message (no JSON, no markdown, no extra text):
+- Current git status: {status}
+- Current git diff (staged and unstaged changes): {diff}
+- Current branch: {branch}
+- Recent commits: {log}
 
-CRITICAL: The message MUST be 72 characters or less. This is a hard limit - do not exceed it.
+## Your task
 
-Requirements:
-- Follow conventional commits format (feat:, fix:, refactor:, chore:, etc.)
-- Present tense, describe what the change does
-- Be concise and specific
-
-Examples:
-- feat: add user authentication with JWT
-- fix: resolve loading spinner bug in dashboard
-- refactor: simplify API client error handling
-
-Git diff:
-{diff}`
+Based on the above changes, create a single git commit with a proper Conventional Commits message and push to git. Never add that this commit is generated with claude code in the end.`
 
 	// DefaultBranchNamePrompt generates a semantic branch name from git diff
 	// The {diff} placeholder will be replaced with the actual git diff

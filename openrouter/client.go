@@ -61,9 +61,9 @@ func NewClient(apiKey, model string) *Client {
 	}
 }
 
-// GenerateCommitMessage generates a one-line conventional commit message based on git diff
+// GenerateCommitMessage generates a one-line conventional commit message based on git context
 // If customPrompt is empty, uses the default prompt
-func (c *Client) GenerateCommitMessage(diff, customPrompt string) (subject string, err error) {
+func (c *Client) GenerateCommitMessage(status, diff, branch, log, customPrompt string) (subject string, err error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("OpenRouter API key not configured")
 	}
@@ -78,8 +78,12 @@ func (c *Client) GenerateCommitMessage(diff, customPrompt string) (subject strin
 	if prompt == "" {
 		prompt = DefaultCommitPrompt
 	}
-	// Replace {diff} placeholder with actual diff
+
+	// Replace all placeholders with actual context
+	prompt = strings.ReplaceAll(prompt, "{status}", status)
 	prompt = strings.ReplaceAll(prompt, "{diff}", diff)
+	prompt = strings.ReplaceAll(prompt, "{branch}", branch)
+	prompt = strings.ReplaceAll(prompt, "{log}", log)
 
 	response, err := c.callAPI(prompt)
 	if err != nil {

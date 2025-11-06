@@ -1208,6 +1208,39 @@ func (m *Manager) GetCurrentUser(worktreePath string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// GetStatus returns the git status for a worktree
+func (m *Manager) GetStatus(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "status")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git status: %w", err)
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
+// GetCurrentBranchForWorktree returns the current branch name for a specific worktree
+func (m *Manager) GetCurrentBranchForWorktree(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "branch", "--show-current")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
+// GetRecentCommits returns the recent commit log (last 10 commits, one line each)
+func (m *Manager) GetRecentCommits(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "-C", worktreePath, "log", "--oneline", "-10")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get recent commits: %w", err)
+	}
+
+	return strings.TrimSpace(string(output)), nil
+}
+
 // convertSSHToHTTPS converts SSH git URL to HTTPS format
 // Example: git@github.com:user/repo.git -> https://github.com/user/repo
 func convertSSHToHTTPS(url string) string {

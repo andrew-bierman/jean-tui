@@ -1243,6 +1243,12 @@ func (m Model) generateCommitMessageWithAI(worktreePath string) tea.Cmd {
 			return commitMessageGeneratedMsg{err: fmt.Errorf("OpenRouter API key not configured")}
 		}
 
+		// Get git status
+		status, err := m.gitManager.GetStatus(worktreePath)
+		if err != nil {
+			status = "(unable to get status)"
+		}
+
 		// Get the git diff as context
 		diff, err := m.gitManager.GetDiff(worktreePath)
 		if err != nil {
@@ -1253,11 +1259,23 @@ func (m Model) generateCommitMessageWithAI(worktreePath string) tea.Cmd {
 			return commitMessageGeneratedMsg{err: fmt.Errorf("no changes to commit")}
 		}
 
+		// Get current branch
+		branch, err := m.gitManager.GetCurrentBranchForWorktree(worktreePath)
+		if err != nil {
+			branch = "(unable to get branch)"
+		}
+
+		// Get recent commits
+		log, err := m.gitManager.GetRecentCommits(worktreePath)
+		if err != nil {
+			log = "(unable to get recent commits)"
+		}
+
 		// Call OpenRouter API
 		model := m.configManager.GetOpenRouterModel()
 		client := openrouter.NewClient(apiKey, model)
 		customPrompt := m.configManager.GetCommitPrompt()
-		subject, err := client.GenerateCommitMessage(diff, customPrompt)
+		subject, err := client.GenerateCommitMessage(status, diff, branch, log, customPrompt)
 		if err != nil {
 			return commitMessageGeneratedMsg{err: fmt.Errorf("failed to generate commit message: %w", err)}
 		}
@@ -1455,8 +1473,11 @@ func (m Model) testOpenRouterAPIKey(apiKey, model string) tea.Cmd {
 		client := openrouter.NewClient(apiKey, model)
 
 		// Make a simple test prompt - use empty custom prompt to use default
+		testStatus := "test status"
 		testDiff := "test content"
-		_, err := client.GenerateCommitMessage(testDiff, "")
+		testBranch := "test-branch"
+		testLog := "test commit"
+		_, err := client.GenerateCommitMessage(testStatus, testDiff, testBranch, testLog, "")
 		if err != nil {
 			return apiKeyTestedMsg{success: false, err: err}
 		}
