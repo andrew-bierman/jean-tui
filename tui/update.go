@@ -2328,6 +2328,12 @@ func (m Model) handleSessionListModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 			}
 			return m, nil
 		},
+		onCancel: func(m Model) (tea.Model, tea.Cmd) {
+			// Clear notifications when closing modal to avoid lingering messages
+			m.notification = nil
+			m.modal = noModal
+			return m, nil
+		},
 		onCustomKey: func(m Model, key string) (tea.Model, tea.Cmd) {
 			if key == "d" && m.sessionIndex >= 0 && m.sessionIndex < len(m.sessions) {
 				// Kill selected session

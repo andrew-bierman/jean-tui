@@ -239,6 +239,7 @@ type Model struct {
 	// PR state settings modal state
 	prStateSettingsCursor int // Selected PR state (0=draft, 1=ready for review)
 	prIsDraft    bool // Whether to create PR as draft (based on config setting)
+	prTypeCursor int  // Selected PR type (0=draft, 1=ready for review)
 
 	// Scripts modal state
 	scriptConfig       *config.ScriptConfig   // Loaded script configuration
