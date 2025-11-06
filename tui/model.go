@@ -136,6 +136,7 @@ type Model struct {
 
 	// Branch status tracking
 	lastCreatedBranch string // Last created branch name (for auto-selection after creation)
+	lastRenamedBranch string // Last renamed branch name (for auto-selection after rename)
 
 	// Activity tracking
 	lastActivityCheck     time.Time
