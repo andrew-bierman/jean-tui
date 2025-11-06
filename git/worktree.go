@@ -1052,7 +1052,7 @@ func parseCount(s string) (int, error) {
 
 // CreateCommit stages all changes and creates a commit with the given subject and body
 // Returns the commit hash on success or an error
-func (m *Manager) CreateCommit(worktreePath, subject, body string) (string, error) {
+func (m *Manager) CreateCommit(worktreePath, subject string) (string, error) {
 	if subject == "" {
 		return "", fmt.Errorf("commit subject cannot be empty")
 	}
@@ -1063,13 +1063,8 @@ func (m *Manager) CreateCommit(worktreePath, subject, body string) (string, erro
 		return "", fmt.Errorf("failed to stage changes: %s", string(output))
 	}
 
-	// Build the commit command
+	// Build the commit command with only the subject
 	args := []string{"-C", worktreePath, "commit", "-m", subject}
-
-	// Add body if provided
-	if body != "" {
-		args = append(args, "-m", body)
-	}
 
 	commitCmd := exec.Command("git", args...)
 	output, err := commitCmd.CombinedOutput()

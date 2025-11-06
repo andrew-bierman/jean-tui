@@ -1102,24 +1102,14 @@ func (m Model) renderCommitModal() string {
 	b.WriteString(modalTitleStyle.Render(title))
 	b.WriteString("\n\n")
 
-	// Subject input
-	b.WriteString(inputLabelStyle.Render("Subject (required):"))
+	// Subject input (one-line conventional commit)
+	b.WriteString(inputLabelStyle.Render("Subject (required, one-line conventional commit):"))
 	b.WriteString("\n")
 	subjectStyle := normalItemStyle
 	if m.modalFocused == 0 {
 		subjectStyle = selectedItemStyle
 	}
 	b.WriteString(subjectStyle.Render(m.commitSubjectInput.View()))
-	b.WriteString("\n\n")
-
-	// Body input
-	b.WriteString(inputLabelStyle.Render("Body (optional):"))
-	b.WriteString("\n")
-	bodyStyle := normalItemStyle
-	if m.modalFocused == 1 {
-		bodyStyle = selectedItemStyle
-	}
-	b.WriteString(bodyStyle.Render(m.commitBodyInput.View()))
 	b.WriteString("\n\n")
 
 	// Status message (error or success from AI generation) or spinner
@@ -1152,9 +1142,9 @@ func (m Model) renderCommitModal() string {
 	commitStyle := normalItemStyle
 	cancelStyle := normalItemStyle
 
-	if m.modalFocused == 2 {
+	if m.modalFocused == 1 {
 		commitStyle = selectedItemStyle
-	} else if m.modalFocused == 3 {
+	} else if m.modalFocused == 2 {
 		cancelStyle = selectedItemStyle
 	}
 
@@ -1167,7 +1157,7 @@ func (m Model) renderCommitModal() string {
 	b.WriteString(buttons)
 
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("Tab: next field • Enter: confirm/move • Esc: cancel"))
+	b.WriteString(helpStyle.Render("Tab: next • Enter: confirm • Esc: cancel"))
 
 	// Center the modal
 	modalContent := b.String()
@@ -1247,7 +1237,7 @@ func (m Model) renderPRContentModal() string {
 	b.WriteString(buttons)
 
 	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("Tab: next field • Enter: confirm/move • Esc: cancel"))
+	b.WriteString(helpStyle.Render("Tab: next • Enter: confirm • Esc: cancel"))
 
 	// Center the modal
 	modalContent := b.String()

@@ -4,16 +4,21 @@ package openrouter
 // These can be overridden by user-customized prompts in the config
 
 const (
-	// DefaultCommitPrompt generates a conventional commit message from git diff
+	// DefaultCommitPrompt generates a one-line conventional commit message from git diff
 	// The {diff} placeholder will be replaced with the actual git diff
-	DefaultCommitPrompt = `Generate a conventional commit message for the following git diff.
+	DefaultCommitPrompt = `Generate a one-line conventional commit message for the following git diff.
 
-Return ONLY valid JSON in this format (no markdown, no extra text):
-{"subject": "...", "body": "..."}
+Return ONLY the commit message (no JSON, no markdown, no extra text):
 
 Requirements:
-- subject: Required. Max 72 characters. Follow conventional commits (feat:, fix:, refactor:, etc.)
-- body: Optional. Max 500 characters. Explain why, not what. Use plain text (no code blocks).
+- Max 72 characters
+- Follow conventional commits format (feat:, fix:, refactor:, chore:, etc.)
+- Present tense, describe what the change does
+
+Examples:
+- feat: add user authentication with JWT
+- fix: resolve loading spinner bug in dashboard
+- refactor: simplify API client error handling
 
 Git diff:
 {diff}`

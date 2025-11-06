@@ -61,11 +61,11 @@ func NewClient(apiKey, model string) *Client {
 	}
 }
 
-// GenerateCommitMessage generates a conventional commit message based on git diff
+// GenerateCommitMessage generates a one-line conventional commit message based on git diff
 // If customPrompt is empty, uses the default prompt
-func (c *Client) GenerateCommitMessage(diff, customPrompt string) (subject, body string, err error) {
+func (c *Client) GenerateCommitMessage(diff, customPrompt string) (subject string, err error) {
 	if c.apiKey == "" {
-		return "", "", fmt.Errorf("OpenRouter API key not configured")
+		return "", fmt.Errorf("OpenRouter API key not configured")
 	}
 
 	// Limit diff to reasonable size to avoid token limits
@@ -83,31 +83,19 @@ func (c *Client) GenerateCommitMessage(diff, customPrompt string) (subject, body
 
 	response, err := c.callAPI(prompt)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 
-	// Parse JSON response
-	var msg CommitMessage
-	if err := json.Unmarshal([]byte(response), &msg); err != nil {
-		return "", "", fmt.Errorf("failed to parse AI response: %w", err)
+	// Parse plain text response (no JSON)
+	subject = strings.TrimSpace(response)
+	if subject == "" {
+		return "", fmt.Errorf("AI generated empty commit subject")
+	}
+	if len(subject) > 72 {
+		subject = subject[:72]
 	}
 
-	// Validate subject
-	msg.Subject = strings.TrimSpace(msg.Subject)
-	if msg.Subject == "" {
-		return "", "", fmt.Errorf("AI generated empty commit subject")
-	}
-	if len(msg.Subject) > 72 {
-		msg.Subject = msg.Subject[:72]
-	}
-
-	// Clean up body
-	msg.Body = strings.TrimSpace(msg.Body)
-	if len(msg.Body) > 500 {
-		msg.Body = msg.Body[:500]
-	}
-
-	return msg.Subject, msg.Body, nil
+	return subject, nil
 }
 
 // GenerateBranchName generates a semantic branch name based on git diff

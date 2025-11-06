@@ -148,7 +148,6 @@ type Model struct {
 	searchInput            textinput.Model
 	sessionNameInput       textinput.Model // Session name input for new worktree
 	commitSubjectInput     textinput.Model // Subject line for commit message
-	commitBodyInput        textinput.Model // Body for commit message
 	prTitleInput           textinput.Model // PR title input
 	prDescriptionInput     textinput.Model // PR description input
 	prModalFocused         int             // Which field in PR modal is focused (0=title, 1=description, 2=create, 3=cancel)
@@ -210,6 +209,7 @@ type Model struct {
 	// PR commit flow state
 	commitBeforePR      bool   // Flag to track if we're committing before PR creation
 	prCreationPending   string // Worktree path for PR creation after commit
+	lastCommitMessage   string // Last commit message created (used as PR title)
 
 	// Auto-commit with AI state
 	autoCommitWithAI    bool   // Flag to track if we're auto-committing with AI (without opening modal)
@@ -292,11 +292,6 @@ func NewModel(repoPath string, autoClaude bool) Model {
 	commitSubjectInput.Placeholder = "Commit subject (required)"
 	commitSubjectInput.CharLimit = 72
 	commitSubjectInput.Width = 70
-
-	commitBodyInput := textinput.New()
-	commitBodyInput.Placeholder = "Commit body (optional)"
-	commitBodyInput.CharLimit = 500
-	commitBodyInput.Width = 70
 
 	prTitleInput := textinput.New()
 	prTitleInput.Placeholder = "PR title (required, max 72 characters)"
@@ -385,7 +380,6 @@ func NewModel(repoPath string, autoClaude bool) Model {
 		searchInput:        searchInput,
 		sessionNameInput:   sessionNameInput,
 		commitSubjectInput: commitSubjectInput,
-		commitBodyInput:    commitBodyInput,
 		prTitleInput:       prTitleInput,
 		prDescriptionInput: prDescriptionInput,
 		aiAPIKeyInput:      aiAPIKeyInput,
@@ -570,6 +564,7 @@ type (
 	commitCreatedMsg struct {
 		err        error
 		commitHash string
+		subject    string // The commit message/subject used
 	}
 
 	autoCommitBeforePRMsg struct {
@@ -595,7 +590,6 @@ type (
 
 	commitMessageGeneratedMsg struct {
 		subject string
-		body    string
 		err     error
 	}
 
@@ -1160,14 +1154,14 @@ func (m Model) createPRRetry(worktreePath, branch string, title string, descript
 }
 
 // createCommit creates a commit with the given subject and body
-func (m Model) createCommit(worktreePath, subject, body string) tea.Cmd {
+func (m Model) createCommit(worktreePath, subject string) tea.Cmd {
 	return func() tea.Msg {
 		if subject == "" {
 			return commitCreatedMsg{err: fmt.Errorf("commit subject cannot be empty")}
 		}
 
-		commitHash, err := m.gitManager.CreateCommit(worktreePath, subject, body)
-		return commitCreatedMsg{err: err, commitHash: commitHash}
+		commitHash, err := m.gitManager.CreateCommit(worktreePath, subject)
+		return commitCreatedMsg{err: err, commitHash: commitHash, subject: subject}
 	}
 }
 
@@ -1184,7 +1178,7 @@ func (m Model) autoCommitBeforePR(worktreePath, branch string) tea.Cmd {
 			subject = strings.ToUpper(subject[:1]) + subject[1:]
 		}
 
-		_, err := m.gitManager.CreateCommit(worktreePath, subject, "")
+		_, err := m.gitManager.CreateCommit(worktreePath, subject)
 		return autoCommitBeforePRMsg{worktreePath: worktreePath, branch: branch, err: err}
 	}
 }
@@ -1228,12 +1222,12 @@ func (m Model) generateCommitMessageWithAI(worktreePath string) tea.Cmd {
 		model := m.configManager.GetOpenRouterModel()
 		client := openrouter.NewClient(apiKey, model)
 		customPrompt := m.configManager.GetCommitPrompt()
-		subject, body, err := client.GenerateCommitMessage(diff, customPrompt)
+		subject, err := client.GenerateCommitMessage(diff, customPrompt)
 		if err != nil {
 			return commitMessageGeneratedMsg{err: fmt.Errorf("failed to generate commit message: %w", err)}
 		}
 
-		return commitMessageGeneratedMsg{subject: subject, body: body, err: nil}
+		return commitMessageGeneratedMsg{subject: subject, err: nil}
 	}
 }
 
@@ -1427,7 +1421,7 @@ func (m Model) testOpenRouterAPIKey(apiKey, model string) tea.Cmd {
 
 		// Make a simple test prompt - use empty custom prompt to use default
 		testDiff := "test content"
-		_, _, err := client.GenerateCommitMessage(testDiff, "")
+		_, err := client.GenerateCommitMessage(testDiff, "")
 		if err != nil {
 			return apiKeyTestedMsg{success: false, err: err}
 		}
