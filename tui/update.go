@@ -80,8 +80,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This ensures cursor is positioned correctly in the sorted list
 		m.sortWorktrees()
 
-			// If we just created a worktree, select it
-			if m.lastCreatedBranch != "" {
+			// Priority 1: If we just renamed a worktree, select the renamed branch
+			if m.lastRenamedBranch != "" {
+				for i, wt := range m.worktrees {
+					if wt.Branch == m.lastRenamedBranch {
+						m.selectedIndex = i
+						// Clear the flag
+						m.lastRenamedBranch = ""
+						break
+					}
+				}
+			} else if m.lastCreatedBranch != "" {
+				// Priority 2: If we just created a worktree, select it
 				for i, wt := range m.worktrees {
 					if wt.Branch == m.lastCreatedBranch {
 						m.selectedIndex = i
@@ -91,7 +101,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			} else {
-				// Otherwise, restore last selected branch if available
+				// Priority 3: Otherwise, restore last selected branch if available
 				if m.configManager != nil {
 					if lastBranch := m.configManager.GetLastSelectedBranch(m.repoPath); lastBranch != "" {
 						// Find the worktree with this branch
@@ -321,6 +331,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			cmd = m.showSuccessNotification(notificationMsg, 4*time.Second)
+			// Track the renamed branch for auto-selection after reload
+			m.lastRenamedBranch = msg.newBranch
 			// Rename tmux sessions to match the new branch name
 			// Reload worktree list to update the UI
 			return m, tea.Batch(
