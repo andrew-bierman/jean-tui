@@ -105,6 +105,7 @@ jean -path /path/to/other/repo
 |-----|--------|
 | `P` | Create draft PR |
 | `N` | Create worktree from PR |
+| `L` | Local merge (worktree → base) |
 | `v` | View PR in browser |
 | `M` | Merge PR |
 | `g` | Open repo in browser |
