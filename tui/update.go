@@ -1001,6 +1001,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			)
 		}
 
+	case localMergePreparedMsg:
+		if msg.err != nil {
+			cmd = m.showErrorNotification("Failed to prepare merge: " + msg.err.Error(), 5*time.Second)
+			return m, cmd
+		}
+
+		// Store merge info and show confirmation modal
+		m.localMergeBranch = msg.branch
+		m.localMergeTarget = msg.target
+		m.localMergeWorktree = msg.worktreePath
+		m.localMergeAhead = msg.ahead
+		m.localMergeBehind = msg.behind
+		m.localMergeFocused = 0 // Default to confirm button
+		m.modal = localMergeConfirmModal
+		m.debugLog(fmt.Sprintf("Local merge prepared: %s -> %s (ahead: %d, behind: %d)", msg.branch, msg.target, msg.ahead, msg.behind))
+		return m, nil
+
+	case localMergeCompletedMsg:
+		if msg.err != nil {
+			if msg.hadConflict {
+				// Show error with abort option
+				cmd = m.showWarningNotification("Merge conflict! Resolve conflicts and commit, or run 'git merge --abort' in main repo.")
+				return m, tea.Batch(
+					cmd,
+					m.loadWorktrees(), // Refresh to show updated state
+				)
+			} else {
+				cmd = m.showErrorNotification("Failed to merge: " + msg.err.Error(), 5*time.Second)
+				return m, tea.Batch(
+					cmd,
+					m.loadWorktrees(),
+				)
+			}
+		}
+
+		// Merge successful - show post-merge cleanup modal
+		m.debugLog(fmt.Sprintf("Local merge completed successfully: %s merged into %s", msg.branch, m.localMergeTarget))
+		m.postMergeDeleteIndex = 0 // Default to delete option
+		m.modal = postMergeCleanupModal
+
+		// Update worktree list to show we're now on base branch
+		return m, m.loadWorktrees()
+
 	case refreshWithPullMsg:
 		if msg.err != nil {
 			cmd = m.showErrorNotification("Failed to refresh: " + msg.err.Error(), 5*time.Second)
@@ -1690,6 +1733,39 @@ func (m Model) handleMainInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.debugLog("PR list modal state: prListCreationMode=true, repoPath=" + m.repoPath)
 		return m, m.loadPRs()
 
+	case "L":
+		// Local merge: merge worktree branch into base branch locally (Shift+L)
+		if wt := m.selectedWorktree(); wt != nil {
+			// Safety check: base branch must be set
+			if m.baseBranch == "" {
+				return m, m.showWarningNotification("Base branch not set. Press 'b' to set base branch")
+			}
+
+			// Safety check: only allow merge from workspace worktrees (not main repo)
+			if !strings.Contains(wt.Path, ".workspaces") {
+				return m, m.showWarningNotification("Can only merge workspace worktrees. Use 'git merge' manually in main repo.")
+			}
+
+			// Safety check: cannot merge base branch into itself
+			if wt.Branch == m.baseBranch {
+				return m, m.showWarningNotification("Cannot merge base branch into itself")
+			}
+
+			// Safety check: ensure no uncommitted changes
+			hasUncommitted, err := m.gitManager.HasUncommittedChanges(wt.Path)
+			if err != nil {
+				return m, m.showErrorNotification("Failed to check for uncommitted changes: "+err.Error(), 3*time.Second)
+			}
+			if hasUncommitted {
+				return m, m.showWarningNotification("Commit or stash changes before merging. Press 'c' to commit.")
+			}
+
+			// All checks passed - prepare merge (fetch and get status)
+			m.debugLog(fmt.Sprintf("L keybinding: preparing local merge of %s into %s", wt.Branch, m.baseBranch))
+			cmd = m.showInfoNotification("Preparing merge...")
+			return m, tea.Batch(cmd, m.prepareLocalMerge(wt.Path, wt.Branch, m.baseBranch))
+		}
+
 	case "c":
 		// Commit changes
 		if wt := m.selectedWorktree(); wt != nil {
@@ -1862,6 +1938,12 @@ func (m Model) handleModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case mergeStrategyModal:
 		return m.handleMergeStrategyModalInput(msg)
+
+	case localMergeConfirmModal:
+		return m.handleLocalMergeConfirmModalInput(msg)
+
+	case postMergeCleanupModal:
+		return m.handlePostMergeCleanupModalInput(msg)
 
 	case aiPromptsModal:
 		return m.handleAIPromptsModalInput(msg)
@@ -2813,6 +2895,116 @@ func (m Model) handleMergeStrategyModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 			notifyCmd,
 			m.mergePR(wt.Path, selectedPR.URL, mergeMethod),
 		)
+	}
+
+	return m, nil
+}
+
+func (m Model) handleLocalMergeConfirmModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Cancel merge and close modal
+		m.modal = noModal
+		m.localMergeBranch = ""
+		m.localMergeTarget = ""
+		m.localMergeWorktree = ""
+		return m, nil
+
+	case "tab":
+		// Cycle between confirm (0) and cancel (1) buttons
+		m.localMergeFocused = (m.localMergeFocused + 1) % 2
+		return m, nil
+
+	case "left", "shift+tab":
+		// Move focus left (backward)
+		if m.localMergeFocused > 0 {
+			m.localMergeFocused--
+		} else {
+			m.localMergeFocused = 1 // Wrap around to cancel
+		}
+		return m, nil
+
+	case "right":
+		// Move focus right (forward)
+		if m.localMergeFocused < 1 {
+			m.localMergeFocused++
+		} else {
+			m.localMergeFocused = 0 // Wrap around to confirm
+		}
+		return m, nil
+
+	case "enter":
+		// Execute based on focused button
+		if m.localMergeFocused == 0 {
+			// Confirm button - execute merge
+			m.debugLog(fmt.Sprintf("Local merge confirmed: %s -> %s", m.localMergeBranch, m.localMergeTarget))
+
+			branch := m.localMergeBranch
+			target := m.localMergeTarget
+			worktree := m.localMergeWorktree
+
+			// Close modal
+			m.modal = noModal
+
+			// Show notification and execute merge
+			notifyCmd := m.showInfoNotification(fmt.Sprintf("Merging %s into %s...", branch, target))
+			return m, tea.Batch(
+				notifyCmd,
+				m.executeLocalMerge(worktree, branch, target),
+			)
+		} else {
+			// Cancel button - just close modal
+			m.modal = noModal
+			m.localMergeBranch = ""
+			m.localMergeTarget = ""
+			m.localMergeWorktree = ""
+			return m, nil
+		}
+	}
+
+	return m, nil
+}
+
+func (m Model) handlePostMergeCleanupModalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// Close modal without action
+		m.modal = noModal
+		return m, nil
+
+	case "up":
+		if m.postMergeDeleteIndex > 0 {
+			m.postMergeDeleteIndex--
+		}
+		return m, nil
+
+	case "down":
+		if m.postMergeDeleteIndex < 1 {
+			m.postMergeDeleteIndex++
+		}
+		return m, nil
+
+	case "enter":
+		branch := m.localMergeBranch
+		worktree := m.localMergeWorktree
+
+		if m.postMergeDeleteIndex == 0 {
+			// User chose to delete worktree
+			m.debugLog(fmt.Sprintf("Post-merge cleanup: deleting worktree %s (branch: %s)", worktree, branch))
+			m.modal = noModal
+
+			// Delete the worktree (force=false since we know it's clean)
+			notifyCmd := m.showInfoNotification("Deleting merged worktree...")
+			return m, tea.Batch(
+				notifyCmd,
+				m.deleteWorktree(worktree, branch, false),
+			)
+		} else {
+			// User chose to keep worktree
+			m.debugLog(fmt.Sprintf("Post-merge cleanup: keeping worktree %s", worktree))
+			m.modal = noModal
+			return m, m.showSuccessNotification("Merge complete. Worktree kept for reference.", 3*time.Second)
+		}
 	}
 
 	return m, nil

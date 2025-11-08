@@ -360,6 +360,7 @@ func (m Model) renderMinimalHelpBar() string {
 		"c commit",
 		"p push",
 		"P create PR",
+		"L local merge",
 		"g github",
 		"h help",
 		"q quit",
@@ -432,6 +433,10 @@ func (m Model) renderModal() string {
 		return m.renderPRListModal()
 	case mergeStrategyModal:
 		return m.renderMergeStrategyModal()
+	case localMergeConfirmModal:
+		return m.renderLocalMergeConfirmModal()
+	case postMergeCleanupModal:
+		return m.renderPostMergeCleanupModal()
 	case helperModal:
 		return m.renderHelperModal()
 	case onboardingModal:
@@ -2058,6 +2063,7 @@ func (m Model) renderHelperModal() string {
 			}{
 				{"P", "Create new PR on GitHub"},
 				{"N", "Create worktree from existing PR"},
+				{"L", "Local merge (worktree → base branch)"},
 				{"v", "Open PR in default browser"},
 			},
 		},
@@ -2195,6 +2201,129 @@ func (m Model) renderMergeStrategyModal() string {
 
 	// Help text
 	b.WriteString(helpStyle.Render("↑/↓ select • enter confirm • esc cancel"))
+
+	// Center the modal
+	content := modalStyle.Width(m.width - 4).Render(b.String())
+	return lipgloss.Place(
+		m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+func (m Model) renderLocalMergeConfirmModal() string {
+	var b strings.Builder
+
+	b.WriteString(modalTitleStyle.Render("🔀 Confirm Local Merge"))
+	b.WriteString("\n\n")
+
+	// Show source and target branches
+	b.WriteString(detailKeyStyle.Render("Source: "))
+	b.WriteString(detailValueStyle.Render(m.localMergeBranch))
+	b.WriteString("\n")
+
+	b.WriteString(detailKeyStyle.Render("Target: "))
+	b.WriteString(detailValueStyle.Render(m.localMergeTarget))
+	b.WriteString("\n\n")
+
+	// Show ahead/behind status
+	statusMsg := fmt.Sprintf("Your branch is %d commit(s) ahead", m.localMergeAhead)
+	if m.localMergeBehind > 0 {
+		statusMsg += fmt.Sprintf(", %d commit(s) behind", m.localMergeBehind)
+	}
+	b.WriteString(helpStyle.Render(statusMsg))
+	b.WriteString("\n\n")
+
+	// Warning if behind
+	if m.localMergeBehind > 0 {
+		warningStyle := normalItemStyle.Copy().Foreground(warningColor).Bold(true)
+		b.WriteString(warningStyle.Render("⚠  Warning: Target branch has new commits. Consider pulling first."))
+		b.WriteString("\n\n")
+	}
+
+	// Info about what will happen
+	b.WriteString(normalItemStyle.Render("This will:"))
+	b.WriteString("\n")
+	b.WriteString(normalItemStyle.Copy().Foreground(mutedColor).Render("  1. Switch to " + m.localMergeTarget + " branch in main repo"))
+	b.WriteString("\n")
+	b.WriteString(normalItemStyle.Copy().Foreground(mutedColor).Render("  2. Merge " + m.localMergeBranch + " into " + m.localMergeTarget))
+	b.WriteString("\n")
+	b.WriteString(normalItemStyle.Copy().Foreground(mutedColor).Render("  3. Offer to delete the merged worktree"))
+	b.WriteString("\n\n")
+
+	// Buttons
+	confirmBtn := "[ Confirm ]"
+	cancelBtn := "[ Cancel ]"
+
+	if m.localMergeFocused == 0 {
+		confirmBtn = selectedItemStyle.Render("[ Confirm ]")
+		cancelBtn = normalItemStyle.Render("[ Cancel ]")
+	} else {
+		confirmBtn = normalItemStyle.Render("[ Confirm ]")
+		cancelBtn = selectedItemStyle.Render("[ Cancel ]")
+	}
+
+	buttonsLine := lipgloss.JoinHorizontal(lipgloss.Center, confirmBtn, "  ", cancelBtn)
+	b.WriteString(buttonsLine)
+	b.WriteString("\n\n")
+
+	// Help text
+	b.WriteString(helpStyle.Render("tab/←/→ navigate • enter confirm • esc cancel"))
+
+	// Center the modal
+	content := modalStyle.Width(m.width - 4).Render(b.String())
+	return lipgloss.Place(
+		m.width, m.height,
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+func (m Model) renderPostMergeCleanupModal() string {
+	var b strings.Builder
+
+	b.WriteString(modalTitleStyle.Render("✓ Merge Successful"))
+	b.WriteString("\n\n")
+
+	// Success message
+	successMsg := fmt.Sprintf("Successfully merged %s into %s", m.localMergeBranch, m.localMergeTarget)
+	b.WriteString(normalItemStyle.Copy().Foreground(successColor).Render(successMsg))
+	b.WriteString("\n\n")
+
+	// Prompt
+	b.WriteString(normalItemStyle.Render("What would you like to do with the merged worktree?"))
+	b.WriteString("\n\n")
+
+	// Options
+	options := []struct {
+		name        string
+		description string
+	}{
+		{"Delete worktree", "Remove the worktree and keep workspace tidy"},
+		{"Keep worktree", "Keep it for reference or future work"},
+	}
+
+	for i, option := range options {
+		isSelected := i == m.postMergeDeleteIndex
+
+		var optionText string
+		if isSelected {
+			optionText = selectedItemStyle.Render("▶ " + option.name)
+		} else {
+			optionText = normalItemStyle.Render("  " + option.name)
+		}
+
+		b.WriteString(optionText)
+		b.WriteString("\n")
+
+		// Add description
+		descStyle := normalItemStyle.Copy().Foreground(mutedColor)
+		b.WriteString(descStyle.Render("  " + option.description))
+		b.WriteString("\n\n")
+	}
+
+	// Help text
+	b.WriteString(helpStyle.Render("↑/↓ select • enter confirm • esc skip"))
 
 	// Center the modal
 	content := modalStyle.Width(m.width - 4).Render(b.String())

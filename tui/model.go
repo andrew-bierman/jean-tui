@@ -52,6 +52,8 @@ const (
 	prListModal
 	createWithNameModal
 	mergeStrategyModal
+	localMergeConfirmModal
+	postMergeCleanupModal
 	aiPromptsModal
 	prStateSettingsModal
 	onboardingModal
@@ -207,6 +209,15 @@ type Model struct {
 	filteredPRs    []github.PRInfo      // Filtered PRs based on search
 	prSearchInput  textinput.Model      // Search input for PR filtering
 	prLoadingError string               // Error message when loading PRs
+
+	// Local merge modal state
+	localMergeBranch     string // Branch being merged (worktree branch)
+	localMergeTarget     string // Target branch (base branch)
+	localMergeWorktree   string // Worktree path being merged
+	localMergeAhead      int    // Number of commits ahead
+	localMergeBehind     int    // Number of commits behind
+	localMergeFocused    int    // Which button is focused (0=confirm, 1=cancel)
+	postMergeDeleteIndex int    // Selected option in post-merge cleanup (0=delete, 1=keep)
 
 	// PR state settings modal state
 	prStateSettingsCursor int // Selected PR state (0=draft, 1=ready for review)
@@ -514,6 +525,22 @@ type (
 	branchPulledMsg struct {
 		err         error
 		hadConflict bool
+	}
+
+	localMergePreparedMsg struct {
+		branch       string // Branch being merged (worktree branch)
+		target       string // Target branch (base branch)
+		worktreePath string // Worktree path
+		ahead        int    // Commits ahead
+		behind       int    // Commits behind
+		err          error
+	}
+
+	localMergeCompletedMsg struct {
+		branch       string // Branch that was merged
+		worktreePath string // Worktree path
+		err          error
+		hadConflict  bool   // Whether there was a merge conflict
 	}
 
 	refreshWithPullMsg struct {
@@ -1758,6 +1785,86 @@ func (m Model) checkAndPullFromBase(worktreePath, baseBranch string) tea.Cmd {
 		}
 
 		return branchPulledMsg{err: nil, hadConflict: false}
+	}
+}
+
+// prepareLocalMerge fetches remote and gets branch status for merge confirmation
+// This prepares the data needed to show the merge confirmation modal
+func (m Model) prepareLocalMerge(worktreePath, branch, baseBranch string) tea.Cmd {
+	return func() tea.Msg {
+		// First: Fetch to get latest remote refs
+		if err := m.gitManager.FetchRemote(); err != nil {
+			return localMergePreparedMsg{err: fmt.Errorf("failed to fetch: %w", err)}
+		}
+
+		// Second: Get ahead/behind counts for the worktree branch vs base branch
+		ahead, behind, err := m.gitManager.GetBranchStatus(worktreePath, branch, baseBranch)
+		if err != nil {
+			return localMergePreparedMsg{err: fmt.Errorf("failed to check branch status: %w", err)}
+		}
+
+		return localMergePreparedMsg{
+			branch:       branch,
+			target:       baseBranch,
+			worktreePath: worktreePath,
+			ahead:        ahead,
+			behind:       behind,
+			err:          nil,
+		}
+	}
+}
+
+// executeLocalMerge performs the local merge of worktree branch into base branch
+// This switches to base branch in main repo and merges the worktree branch
+func (m Model) executeLocalMerge(worktreePath, branch, baseBranch string) tea.Cmd {
+	return func() tea.Msg {
+		// Get repo root
+		repoRoot, err := m.gitManager.GetRepoRoot()
+		if err != nil {
+			return localMergeCompletedMsg{
+				branch:       branch,
+				worktreePath: worktreePath,
+				err:          fmt.Errorf("failed to get repo root: %w", err),
+				hadConflict:  false,
+			}
+		}
+
+		// First: Checkout base branch in main repository
+		if err := m.gitManager.CheckoutBranch(baseBranch); err != nil {
+			return localMergeCompletedMsg{
+				branch:       branch,
+				worktreePath: worktreePath,
+				err:          fmt.Errorf("failed to checkout base branch: %w", err),
+				hadConflict:  false,
+			}
+		}
+
+		// Second: Merge worktree branch into base branch (in main repo)
+		err = m.gitManager.MergeBranch(repoRoot, branch)
+		if err != nil {
+			// Check if it's a merge conflict
+			if strings.Contains(err.Error(), "merge conflict") {
+				return localMergeCompletedMsg{
+					branch:       branch,
+					worktreePath: worktreePath,
+					err:          err,
+					hadConflict:  true,
+				}
+			}
+			return localMergeCompletedMsg{
+				branch:       branch,
+				worktreePath: worktreePath,
+				err:          err,
+				hadConflict:  false,
+			}
+		}
+
+		return localMergeCompletedMsg{
+			branch:       branch,
+			worktreePath: worktreePath,
+			err:          nil,
+			hadConflict:  false,
+		}
 	}
 }
 
