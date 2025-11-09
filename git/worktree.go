@@ -354,8 +354,18 @@ func (m *Manager) executeSetupScript(workspacePath string) error {
 	return nil
 }
 
-// Remove removes a worktree
+// Remove removes a worktree and automatically deletes the associated branch
+// Protects common base branches (main, master, develop, etc.) from deletion
 func (m *Manager) Remove(path string, force bool) error {
+	// Get the branch name before removing the worktree
+	branchName, err := m.GetCurrentBranchForWorktree(path)
+	if err != nil {
+		// If we can't get the branch name, just continue with worktree removal
+		// This might happen if the worktree is in a detached HEAD state
+		branchName = ""
+	}
+
+	// Remove the worktree
 	args := []string{"-C", m.repoPath, "worktree", "remove"}
 
 	if force {
@@ -369,7 +379,35 @@ func (m *Manager) Remove(path string, force bool) error {
 		return fmt.Errorf("failed to remove worktree: %s", string(output))
 	}
 
+	// Delete the branch if it's not a protected base branch
+	if branchName != "" && !isProtectedBranch(branchName) {
+		// Attempt to delete the branch - don't fail the operation if this fails
+		if err := m.DeleteBranch(branchName); err != nil {
+			// Log the warning but don't return error - worktree was already removed successfully
+			fmt.Fprintf(os.Stderr, "Warning: failed to delete branch '%s': %v\n", branchName, err)
+		}
+	}
+
 	return nil
+}
+
+// isProtectedBranch checks if a branch name is a common base branch that should not be deleted
+func isProtectedBranch(branchName string) bool {
+	protectedBranches := []string{
+		"main",
+		"master",
+		"develop",
+		"development",
+		"staging",
+		"production",
+	}
+
+	for _, protected := range protectedBranches {
+		if branchName == protected {
+			return true
+		}
+	}
+	return false
 }
 
 // MoveWorktree moves a worktree to a new location using git worktree move
@@ -437,6 +475,22 @@ func (m *Manager) BranchExists(worktreePath, branchName string) (bool, error) {
 	}
 	// Branch doesn't exist
 	return false, nil
+}
+
+// DeleteBranch deletes a local branch by name
+// Uses -D flag for force deletion (deletes even if not fully merged)
+func (m *Manager) DeleteBranch(branchName string) error {
+	if branchName == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+
+	// Use -D to force delete even if not fully merged
+	cmd := exec.Command("git", "-C", m.repoPath, "branch", "-D", branchName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete branch: %s", string(output))
+	}
+	return nil
 }
 
 // SanitizeBranchName sanitizes a branch name by:

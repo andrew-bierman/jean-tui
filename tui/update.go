@@ -378,7 +378,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.showErrorNotification("Failed to delete worktree", 4*time.Second)
 			return m, cmd
 		} else {
-			cmd = m.showSuccessNotification("Worktree deleted successfully", 3*time.Second)
+			cmd = m.showSuccessNotification("Worktree and branch deleted successfully", 3*time.Second)
 			m.modal = noModal
 			if m.selectedIndex >= len(m.worktrees)-1 {
 				m.selectedIndex = len(m.worktrees) - 2

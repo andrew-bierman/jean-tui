@@ -78,12 +78,13 @@ func (m *Manager) isClaudeAvailable() bool {
 }
 
 // buildClaudeCommand constructs the proper claude command with flags
+// path is the worktree path to add with --add-dir
 // isInitialized determines whether to use --continue flag
-func (m *Manager) buildClaudeCommand(isInitialized bool) string {
+func (m *Manager) buildClaudeCommand(path string, isInitialized bool) string {
 	if isInitialized {
-		return "claude --continue --permission-mode plan"
+		return fmt.Sprintf("claude --add-dir %s --continue --permission-mode plan", path)
 	}
-	return "claude --permission-mode plan"
+	return fmt.Sprintf("claude --add-dir %s --permission-mode plan", path)
 }
 
 // createOrAttach creates a new session or attaches to existing one
@@ -117,7 +118,7 @@ func (m *Manager) Create(sessionName, path string, autoStartClaude bool, targetW
 		if m.isClaudeAvailable() {
 			// Claude is available - create window with proper flags
 			// Use --permission-mode plan (shell wrapper handles --continue for initialized sessions)
-			claudeCmd := m.buildClaudeCommand(false)
+			claudeCmd := m.buildClaudeCommand(path, false)
 			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude", claudeCmd)
 		} else {
 			// Claude not available - create shell window as fallback
@@ -146,7 +147,7 @@ func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool,
 		windowName = "claude"
 		// Use proper claude command with flags, or fallback to shell
 		if m.isClaudeAvailable() {
-			windowCommand = m.buildClaudeCommand(false)
+			windowCommand = m.buildClaudeCommand(path, false)
 		} else {
 			windowCommand = "" // Fallback to shell
 		}
