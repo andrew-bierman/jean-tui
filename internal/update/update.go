@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 
 	gover "github.com/hashicorp/go-version"
+	"github.com/coollabsio/jean-tui/internal/branding"
 )
 
 const (
@@ -129,14 +130,14 @@ func downloadAndInstall(ctx context.Context, release *Release, exePath string) e
 	}
 
 	// Create a temporary directory for the download
-	tmpDir, err := os.MkdirTemp("", "jean-update-")
+	tmpDir, err := os.MkdirTemp("", branding.CLIName+"-update-")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
 	// Download the binary
-	tmpFile := filepath.Join(tmpDir, "jean.tar.gz")
+	tmpFile := filepath.Join(tmpDir, branding.CLIName+".tar.gz")
 	if err := downloadFile(ctx, assetURL, tmpFile); err != nil {
 		return err
 	}

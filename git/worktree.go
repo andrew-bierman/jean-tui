@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/coollabsio/jean-tui/config"
+	"github.com/coollabsio/jean-tui/internal/branding"
 )
 
 // Worktree represents a Git worktree
@@ -340,8 +341,8 @@ func (m *Manager) executeSetupScript(workspacePath string) error {
 	cmd := exec.Command("sh", "-c", script)
 	cmd.Dir = workspacePath // Run script in the worktree directory
 	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("JEAN_WORKSPACE_PATH=%s", workspacePath),
-		fmt.Sprintf("JEAN_ROOT_PATH=%s", repoRoot),
+		fmt.Sprintf("%s=%s", branding.GetEnvVar("WORKSPACE_PATH"), workspacePath),
+		fmt.Sprintf("%s=%s", branding.GetEnvVar("ROOT_PATH"), repoRoot),
 	)
 
 	// Capture both stdout and stderr for error reporting
@@ -706,7 +707,7 @@ func (m *Manager) Push(worktreePath, branch string) error {
 	}
 
 	// Write debug log to file
-	if err := os.WriteFile("/tmp/jean-git-debug.log", []byte(debugLog), 0644); err != nil {
+	if err := os.WriteFile(branding.GetGitDebugLogPath(), []byte(debugLog), 0644); err != nil {
 		// Log write error but continue
 		fmt.Fprintf(os.Stderr, "Warning: could not write debug log: %v\n", err)
 	}

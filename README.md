@@ -208,6 +208,47 @@ go run main.go -path /path/to/test/repo
 ./jean --version
 ```
 
+### Custom Start Commands
+
+Jean supports building with custom CLI names for forks or specialized deployments. This allows you to create variants like `ralph-tui`, `opencode`, or any custom command name while keeping all jean functionality.
+
+**Build with custom branding:**
+```bash
+go build -ldflags "\
+  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=myapp \
+  -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=myapp- \
+  -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=myapp \
+  -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=MYAPP" \
+  -o myapp
+```
+
+**What gets customized:**
+| Variable | Default | Example Custom | Affects |
+|----------|---------|----------------|---------|
+| `CLIName` | `jean` | `opencode` | CLI name, help text, messages |
+| `SessionPrefix` | `jean-` | `opencode-` | Tmux session names |
+| `ConfigDirName` | `jean` | `opencode` | Config directory (`~/.config/<name>`) |
+| `EnvVarPrefix` | `JEAN` | `OPENCODE` | Environment variables |
+
+**Quick example for `ralph-tui`:**
+```bash
+go build -ldflags "\
+  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=ralph-tui \
+  -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=ralph- \
+  -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=ralph \
+  -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=RALPH" \
+  -o ralph-tui
+
+# Now run with your custom command
+./ralph-tui init
+./ralph-tui
+```
+
+This is useful for:
+- Creating specialized agent launchers (e.g., `ralph-tui` for a different AI agent workflow)
+- Team-specific deployments with custom naming
+- Building forks with distinct identities while tracking upstream jean
+
 ### Project Structure
 - `main.go` - CLI entry point
 - `tui/` - Bubble Tea TUI (model, update, view, styles)

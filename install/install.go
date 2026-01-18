@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/coollabsio/jean-tui/config"
+	"github.com/coollabsio/jean-tui/internal/branding"
 )
 
 // Shell represents a shell type
@@ -87,31 +88,31 @@ func GetRCFileForShell(shell Shell, homeDir string) string {
 func (d *Detector) GetWrapper() string {
 	switch d.Shell {
 	case Fish:
-		return FishWrapper
+		return GetFishWrapper()
 	case Zsh:
 		fallthrough
 	case Bash:
 		fallthrough
 	default:
-		return BashZshWrapper
+		return GetBashZshWrapper()
 	}
 }
 
-// IsInstalled checks if jean integration is already in the rc file
+// IsInstalled checks if the integration is already in the rc file
 func (d *Detector) IsInstalled() bool {
 	content, err := os.ReadFile(d.RCFile)
 	if err != nil {
 		return false
 	}
 
-	return strings.Contains(string(content), "BEGIN JEAN INTEGRATION")
+	return ContainsWrapperMarker(string(content))
 }
 
-// Install adds the jean wrapper to the rc file
+// Install adds the wrapper to the rc file
 func (d *Detector) Install(dryRun bool) error {
 	// Check if already installed
 	if d.IsInstalled() {
-		return fmt.Errorf("jean integration is already installed in %s", d.RCFile)
+		return fmt.Errorf("%s integration is already installed in %s", branding.CLIName, d.RCFile)
 	}
 
 	// Create directory if it doesn't exist (for fish)
@@ -123,7 +124,7 @@ func (d *Detector) Install(dryRun bool) error {
 	wrapper := d.GetWrapper()
 
 	if dryRun {
-		fmt.Printf("Would install jean to %s\n", d.RCFile)
+		fmt.Printf("Would install %s to %s\n", branding.CLIName, d.RCFile)
 		fmt.Printf("Content to be added:\n%s\n", wrapper)
 		return nil
 	}
@@ -152,7 +153,7 @@ func (d *Detector) Install(dryRun bool) error {
 		return fmt.Errorf("failed to write to %s: %w", d.RCFile, err)
 	}
 
-	fmt.Printf("✓ jean integration installed to %s\n", d.RCFile)
+	fmt.Printf("✓ %s integration installed to %s\n", branding.CLIName, d.RCFile)
 	fmt.Printf("Run: source %s (or restart your terminal)\n", d.RCFile)
 
 	return nil
@@ -162,13 +163,13 @@ func (d *Detector) Install(dryRun bool) error {
 func (d *Detector) Update(dryRun bool) error {
 	// Check if already installed
 	if !d.IsInstalled() {
-		return fmt.Errorf("jean integration is not installed in %s. Run 'jean init' to install.", d.RCFile)
+		return fmt.Errorf("%s integration is not installed in %s. Run '%s init' to install.", branding.CLIName, d.RCFile, branding.CLIName)
 	}
 
 	wrapper := d.GetWrapper()
 
 	if dryRun {
-		fmt.Printf("Would update jean in %s\n", d.RCFile)
+		fmt.Printf("Would update %s in %s\n", branding.CLIName, d.RCFile)
 		fmt.Printf("New content:\n%s\n", wrapper)
 		return nil
 	}
@@ -182,14 +183,14 @@ func (d *Detector) Update(dryRun bool) error {
 	contentStr := string(content)
 
 	// Remove old integration
-	startMarker := "# BEGIN JEAN INTEGRATION"
-	endMarker := "# END JEAN INTEGRATION"
+	startMarker := GetWrapperStartMarker()
+	endMarker := GetWrapperEndMarker()
 
 	startIdx := strings.Index(contentStr, startMarker)
 	endIdx := strings.Index(contentStr, endMarker)
 
 	if startIdx == -1 || endIdx == -1 {
-		return fmt.Errorf("could not find jean integration markers in %s", d.RCFile)
+		return fmt.Errorf("could not find %s integration markers in %s", branding.CLIName, d.RCFile)
 	}
 
 	// Remove everything from start marker to end marker (inclusive)
@@ -204,21 +205,21 @@ func (d *Detector) Update(dryRun bool) error {
 		return fmt.Errorf("failed to write to %s: %w", d.RCFile, err)
 	}
 
-	fmt.Printf("✓ jean integration updated in %s\n", d.RCFile)
+	fmt.Printf("✓ %s integration updated in %s\n", branding.CLIName, d.RCFile)
 	fmt.Printf("Run: source %s (or restart your terminal)\n", d.RCFile)
 
 	return nil
 }
 
-// Remove removes the jean integration from the rc file
+// Remove removes the integration from the rc file
 func (d *Detector) Remove(dryRun bool) error {
 	// Check if installed
 	if !d.IsInstalled() {
-		return fmt.Errorf("jean integration is not installed in %s", d.RCFile)
+		return fmt.Errorf("%s integration is not installed in %s", branding.CLIName, d.RCFile)
 	}
 
 	if dryRun {
-		fmt.Printf("Would remove jean from %s\n", d.RCFile)
+		fmt.Printf("Would remove %s from %s\n", branding.CLIName, d.RCFile)
 		return nil
 	}
 
@@ -231,14 +232,14 @@ func (d *Detector) Remove(dryRun bool) error {
 	contentStr := string(content)
 
 	// Remove integration block
-	startMarker := "# BEGIN JEAN INTEGRATION"
-	endMarker := "# END JEAN INTEGRATION"
+	startMarker := GetWrapperStartMarker()
+	endMarker := GetWrapperEndMarker()
 
 	startIdx := strings.Index(contentStr, startMarker)
 	endIdx := strings.Index(contentStr, endMarker)
 
 	if startIdx == -1 || endIdx == -1 {
-		return fmt.Errorf("could not find jean integration markers in %s", d.RCFile)
+		return fmt.Errorf("could not find %s integration markers in %s", branding.CLIName, d.RCFile)
 	}
 
 	// Remove the block and the preceding newline
@@ -253,7 +254,7 @@ func (d *Detector) Remove(dryRun bool) error {
 		return fmt.Errorf("failed to write to %s: %w", d.RCFile, err)
 	}
 
-	fmt.Printf("✓ jean integration removed from %s\n", d.RCFile)
+	fmt.Printf("✓ %s integration removed from %s\n", branding.CLIName, d.RCFile)
 
 	return nil
 }
@@ -336,14 +337,14 @@ func (d *Detector) AutoUpdate(cfg *config.Manager) error {
 	contentStr := string(content)
 
 	// Remove old integration
-	startMarker := "# BEGIN JEAN INTEGRATION"
-	endMarker := "# END JEAN INTEGRATION"
+	startMarker := GetWrapperStartMarker()
+	endMarker := GetWrapperEndMarker()
 
 	startIdx := strings.Index(contentStr, startMarker)
 	endIdx := strings.Index(contentStr, endMarker)
 
 	if startIdx == -1 || endIdx == -1 {
-		return fmt.Errorf("could not find jean integration markers in %s", d.RCFile)
+		return fmt.Errorf("could not find %s integration markers in %s", branding.CLIName, d.RCFile)
 	}
 
 	// Remove everything from start marker to end marker (inclusive)

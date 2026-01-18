@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-const sessionPrefix = "jean-"
+	"github.com/coollabsio/jean-tui/internal/branding"
+)
 
 // Session represents a tmux session
 type Session struct {
@@ -49,7 +49,7 @@ func (m *Manager) SanitizeBranchName(branch string) string {
 }
 
 // SanitizeName sanitizes a repo name and branch name for use as a tmux session name
-// Format: jean-<repo>-<branch>
+// Format: <prefix><repo>-<branch> (e.g., "jean-myrepo-feature-branch")
 func (m *Manager) SanitizeName(repoName, branch string) string {
 	// Sanitize both repo name and branch name
 	sanitizedRepo := m.SanitizeBranchName(repoName)
@@ -57,10 +57,10 @@ func (m *Manager) SanitizeName(repoName, branch string) string {
 
 	// Combine with repo name for uniqueness across repositories
 	if sanitizedRepo != "" {
-		return sessionPrefix + sanitizedRepo + "-" + sanitizedBranch
+		return branding.SessionPrefix + sanitizedRepo + "-" + sanitizedBranch
 	}
 	// Fallback if repo name is empty (shouldn't happen)
-	return sessionPrefix + sanitizedBranch
+	return branding.SessionPrefix + sanitizedBranch
 }
 
 // SessionExists checks if a tmux session with the given name exists
@@ -194,12 +194,16 @@ func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool,
 	return cmd.Run()
 }
 
-const jeanTmuxConfigMarker = "# === JEAN_TMUX_CONFIG_START_DO_NOT_MODIFY_THIS_LINE ==="
-const jeanTmuxConfigEnd = "# === JEAN_TMUX_CONFIG_END_DO_NOT_MODIFY_THIS_LINE ==="
+// getTmuxConfig generates the tmux config with proper branding
+func getTmuxConfig() string {
+	startMarker := branding.GetTmuxConfigMarkerStart()
+	endMarker := branding.GetTmuxConfigMarkerEnd()
+	cliName := branding.CLIName
+	prefix := branding.SessionPrefix
 
-const jeanTmuxConfig = `
-# === JEAN_TMUX_CONFIG_START_DO_NOT_MODIFY_THIS_LINE ===
-# jean opinionated tmux configuration
+	return fmt.Sprintf(`
+%s
+# %s opinionated tmux configuration
 # WARNING: Do not modify the marker lines above/below - they are used for automatic updates
 # You can safely delete this entire section if you no longer want these settings
 
@@ -238,8 +242,8 @@ bind-key -n S-Left previous-window
 set -g status-style bg=default,fg=white
 set -g status-left-length 40
 set -g status-right-length 60
-set -g status-left "#[fg=green]jean@#[fg=cyan]#(echo '#S' | sed 's/^jean-\\([^-]*\\)-\\(.*\\)/\\1:\\2/') "
-set -g status-right "#[fg=yellow]%H:%M #[fg=white]%d-%b-%y"
+set -g status-left "#[fg=green]%s@#[fg=cyan]#(echo '#S' | sed 's/^%s\\([^-]*\\)-\\(.*\\)/\\1:\\2/') "
+set -g status-right "#[fg=yellow]%%H:%%M #[fg=white]%%d-%%b-%%y"
 
 # Pane border colors
 set -g pane-border-style fg=colour238
@@ -247,8 +251,9 @@ set -g pane-active-border-style fg=colour33
 
 # Message styling
 set -g message-style bg=colour33,fg=black,bold
-# === JEAN_TMUX_CONFIG_END_DO_NOT_MODIFY_THIS_LINE ===
-`
+%s
+`, startMarker, cliName, cliName, prefix, endMarker)
+}
 
 // HasJeanTmuxConfig checks if ~/.tmux.conf contains jean config
 func (m *Manager) HasJeanTmuxConfig() (bool, error) {
@@ -266,7 +271,7 @@ func (m *Manager) HasJeanTmuxConfig() (bool, error) {
 		return false, err
 	}
 
-	return strings.Contains(string(content), jeanTmuxConfigMarker), nil
+	return strings.Contains(string(content), branding.GetTmuxConfigMarkerStart()), nil
 }
 
 // AddJeanTmuxConfig appends or updates jean config in ~/.tmux.conf
@@ -298,7 +303,7 @@ func (m *Manager) AddJeanTmuxConfig() error {
 	}
 	defer f.Close()
 
-	if _, err := f.WriteString(jeanTmuxConfig); err != nil {
+	if _, err := f.WriteString(getTmuxConfig()); err != nil {
 		return err
 	}
 
@@ -324,19 +329,22 @@ func (m *Manager) RemoveJeanTmuxConfig() error {
 
 	contentStr := string(content)
 
-	// Find and remove the jean config section
-	startIdx := strings.Index(contentStr, jeanTmuxConfigMarker)
+	// Find and remove the config section
+	startMarker := branding.GetTmuxConfigMarkerStart()
+	endMarker := branding.GetTmuxConfigMarkerEnd()
+
+	startIdx := strings.Index(contentStr, startMarker)
 	if startIdx == -1 {
-		return fmt.Errorf("jean tmux config not found in ~/.tmux.conf")
+		return fmt.Errorf("%s tmux config not found in ~/.tmux.conf", branding.CLIName)
 	}
 
-	endIdx := strings.Index(contentStr, jeanTmuxConfigEnd)
+	endIdx := strings.Index(contentStr, endMarker)
 	if endIdx == -1 {
-		return fmt.Errorf("jean tmux config end marker not found in ~/.tmux.conf")
+		return fmt.Errorf("%s tmux config end marker not found in ~/.tmux.conf", branding.CLIName)
 	}
 
 	// Remove the section (including the end marker line)
-	endIdx += len(jeanTmuxConfigEnd)
+	endIdx += len(endMarker)
 	// Also remove trailing newline if present
 	if endIdx < len(contentStr) && contentStr[endIdx] == '\n' {
 		endIdx++
@@ -392,7 +400,7 @@ func (m *Manager) List(repoPath string) ([]Session, error) {
 	var sessions []Session
 
 	for _, line := range lines {
-		if !strings.HasPrefix(line, sessionPrefix) {
+		if !strings.HasPrefix(line, branding.SessionPrefix) {
 			continue
 		}
 
@@ -409,7 +417,7 @@ func (m *Manager) List(repoPath string) ([]Session, error) {
 			continue
 		}
 
-		branch := strings.TrimPrefix(name, sessionPrefix)
+		branch := strings.TrimPrefix(name, branding.SessionPrefix)
 		active := parts[2] == "1"
 
 		// Parse window count

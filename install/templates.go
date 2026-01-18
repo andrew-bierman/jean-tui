@@ -1,25 +1,41 @@
 package install
 
-// BashZshWrapper is the wrapper function for bash and zsh shells
-const BashZshWrapper = `# BEGIN JEAN INTEGRATION
-# jean - Git Worktree TUI Manager shell wrapper
-# Source this in your shell rc file to enable jean with directory switching
+import (
+	"fmt"
+	"strings"
 
-jean() {
-    local debug_log="/tmp/jean-wrapper-debug.log"
+	"github.com/coollabsio/jean-tui/internal/branding"
+)
+
+// GetBashZshWrapper returns the wrapper function for bash and zsh shells
+// with the correct branding applied.
+func GetBashZshWrapper() string {
+	cliName := branding.CLIName
+	configDir := branding.ConfigDirName
+	envVarPrefix := branding.EnvVarPrefix
+	sessionPrefix := branding.SessionPrefix
+	startMarker := branding.GetShellWrapperMarkerStart()
+	endMarker := branding.GetShellWrapperMarkerEnd()
+
+	return fmt.Sprintf(`%s
+# %s - Git Worktree TUI Manager shell wrapper
+# Source this in your shell rc file to enable %s with directory switching
+
+%s() {
+    local debug_log="/tmp/%s-wrapper-debug.log"
     local debug_enabled=false
 
     # Check if debug logging is enabled in config
-    if [ -f "$HOME/.config/jean/config.json" ]; then
-        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/jean/config.json"; then
+    if [ -f "$HOME/.config/%s/config.json" ]; then
+        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/%s/config.json"; then
             debug_enabled=true
         fi
     fi
 
     if [ "$debug_enabled" = "true" ]; then
-    echo "DEBUG wrapper: jean function called with args: $@" >> "$debug_log"
+    echo "DEBUG wrapper: %s function called with args: $@" >> "$debug_log"
     fi
-    # Loop until user explicitly quits jean (not just detaches from tmux)
+    # Loop until user explicitly quits %s (not just detaches from tmux)
     while true; do
         # Save current PATH to restore it later
         local saved_path="$PATH"
@@ -27,8 +43,8 @@ jean() {
         # Create a temp file for communication
         local temp_file=$(mktemp)
 
-        # Set environment variable so jean knows to write to file
-        JEAN_SWITCH_FILE="$temp_file" command jean "$@"
+        # Set environment variable so %s knows to write to file
+        %s_SWITCH_FILE="$temp_file" command %s "$@"
         local exit_code=$?
 
         # Restore PATH if it got corrupted
@@ -64,16 +80,16 @@ jean() {
                 return
             fi
 
-            # Use the pre-sanitized session name from jean (includes repo basename)
-            # Format: jean-<repo>-<branch>
+            # Use the pre-sanitized session name from %s (includes repo basename)
+            # Format: %s<repo>-<branch>
             local session_name="$claude_session_name"
 
             # If session name is empty (older version or fallback), generate it from branch
             if [ -z "$session_name" ]; then
-                session_name="jean-${branch//[^a-zA-Z0-9\-_]/-}"
+                session_name="%s${branch//[^a-zA-Z0-9\-_]/-}"
                 session_name="${session_name//--/-}"
                 session_name="${session_name#-}"
-                session_name="${session_name%-}"
+                session_name="${session_name%%-}"
             fi
 
             # Check if already in a tmux session and if it's the same session we want
@@ -153,7 +169,7 @@ jean() {
             return 1
         fi
         else
-            # No switch file, user quit jean without selecting a worktree
+            # No switch file, user quit %s without selecting a worktree
             # Only remove if it's in /tmp (safety check)
             if [[ "$temp_file" == /tmp/* ]] || [[ "$temp_file" == /var/folders/* ]]; then
                 rm -f "$temp_file"
@@ -163,31 +179,41 @@ jean() {
         fi
     done
 }
-# END JEAN INTEGRATION
-`
+%s
+`, startMarker, cliName, cliName, cliName, cliName, configDir, configDir, cliName, cliName, cliName, envVarPrefix, cliName, cliName, sessionPrefix, sessionPrefix, cliName, endMarker)
+}
 
-// FishWrapper is the wrapper function for fish shell
-const FishWrapper = `# BEGIN JEAN INTEGRATION
-# jean - Git Worktree TUI Manager shell wrapper (Fish shell)
-# Source this in your config.fish to enable jean with directory switching
+// GetFishWrapper returns the wrapper function for fish shell
+// with the correct branding applied.
+func GetFishWrapper() string {
+	cliName := branding.CLIName
+	configDir := branding.ConfigDirName
+	envVarPrefix := branding.EnvVarPrefix
+	sessionPrefix := branding.SessionPrefix
+	startMarker := branding.GetShellWrapperMarkerStart()
+	endMarker := branding.GetShellWrapperMarkerEnd()
 
-function jean
+	return fmt.Sprintf(`%s
+# %s - Git Worktree TUI Manager shell wrapper (Fish shell)
+# Source this in your config.fish to enable %s with directory switching
+
+function %s
     # Check if debug logging is enabled in config
     set debug_enabled false
-    if test -f "$HOME/.config/jean/config.json"
-        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/jean/config.json"
+    if test -f "$HOME/.config/%s/config.json"
+        if grep -q '"debug_logging_enabled"\s*:\s*true' "$HOME/.config/%s/config.json"
             set debug_enabled true
         end
     end
 
-    # Loop until user explicitly quits jean (not just detaches from tmux)
+    # Loop until user explicitly quits %s (not just detaches from tmux)
     while true
         # Create a temp file for communication
         set temp_file (mktemp)
 
-        # Set environment variable so jean knows to write to file
-        set -x JEAN_SWITCH_FILE $temp_file
-        command jean $argv
+        # Set environment variable so %s knows to write to file
+        set -x %s_SWITCH_FILE $temp_file
+        command %s $argv
         set exit_code $status
 
         # Check if switch info was written
@@ -225,13 +251,13 @@ function jean
                     return
                 end
 
-                # Use the pre-sanitized session name from jean (includes repo basename)
-                # Format: jean-<repo>-<branch>
+                # Use the pre-sanitized session name from %s (includes repo basename)
+                # Format: %s<repo>-<branch>
                 set session_name "$claude_session_name"
 
                 # If session name is empty (older version or fallback), generate it from branch
                 if test -z "$session_name"
-                    set session_name "jean-"(string replace -ra '[^a-zA-Z0-9\-_]' '-' $branch)
+                    set session_name "%s"(string replace -ra '[^a-zA-Z0-9\-_]' '-' $branch)
                     set session_name (string replace -ra '--+' '-' $session_name)
                     set session_name (string trim -c '-' $session_name)
                 end
@@ -312,5 +338,25 @@ function jean
         end
     end
 end
-# END JEAN INTEGRATION
-`
+%s
+`, startMarker, cliName, cliName, cliName, configDir, configDir, cliName, cliName, envVarPrefix, cliName, cliName, sessionPrefix, sessionPrefix, endMarker)
+}
+
+// Legacy constants for backwards compatibility (deprecated, use functions instead)
+var BashZshWrapper = GetBashZshWrapper()
+var FishWrapper = GetFishWrapper()
+
+// GetWrapperStartMarker returns the start marker for shell wrapper detection.
+func GetWrapperStartMarker() string {
+	return branding.GetShellWrapperMarkerStart()
+}
+
+// GetWrapperEndMarker returns the end marker for shell wrapper detection.
+func GetWrapperEndMarker() string {
+	return branding.GetShellWrapperMarkerEnd()
+}
+
+// ContainsWrapperMarker checks if content contains the wrapper integration marker.
+func ContainsWrapperMarker(content string) bool {
+	return strings.Contains(content, branding.GetShellWrapperMarkerStart())
+}

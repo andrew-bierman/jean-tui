@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/coollabsio/jean-tui/internal/branding"
 	"github.com/coollabsio/jean-tui/openrouter"
 )
 
@@ -67,8 +69,8 @@ func NewManager() (*Manager, error) {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Create config directory: ~/.config/jean
-	configDir := filepath.Join(home, ".config", "jean")
+	// Create config directory: ~/.config/<cli-name> (e.g., ~/.config/jean)
+	configDir := filepath.Join(home, ".config", branding.ConfigDirName)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}

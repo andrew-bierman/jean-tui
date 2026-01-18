@@ -94,6 +94,9 @@ The application follows a clean separation of concerns:
   - `client.go`: OpenRouter API client for commit messages, branch names, PR content generation
 - **install/**: Installation utilities and shell wrapper templates
   - `templates.go`: Embedded shell wrapper templates (BashZshWrapper, FishWrapper) compiled into binary
+- **internal/branding/**: CLI naming and customization
+  - `branding.go`: Configurable CLI name, session prefix, config directory, and environment variable prefix
+  - All values can be overridden at build time using ldflags for custom forks/deployments
 
 ### Detailed File Structure
 

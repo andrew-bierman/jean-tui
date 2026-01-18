@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/coollabsio/jean-tui/config"
 	"github.com/coollabsio/jean-tui/install"
+	"github.com/coollabsio/jean-tui/internal/branding"
 	"github.com/coollabsio/jean-tui/internal/update"
 	"github.com/coollabsio/jean-tui/internal/version"
 	"github.com/coollabsio/jean-tui/tui"
@@ -26,7 +27,7 @@ func debugLog(msg string) {
 	if !debugLoggingEnabled {
 		return
 	}
-	if f, err := os.OpenFile("/tmp/jean-debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+	if f, err := os.OpenFile(branding.GetDebugLogPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 		fmt.Fprintf(f, "%s\n", msg)
 		f.Close()
 	}
@@ -43,9 +44,9 @@ func main() {
 	// Check for unsupported Windows (native, not WSL2)
 	if runtime.GOOS == "windows" {
 		if !isRunningInWSL() {
-			fmt.Fprintf(os.Stderr, "Error: jean requires WSL2 on Windows\n\n")
-			fmt.Fprintf(os.Stderr, "jean depends on tmux and bash/zsh/fish, which are not available on native Windows.\n")
-			fmt.Fprintf(os.Stderr, "Please install and use WSL2 (Windows Subsystem for Linux 2) to run Jean.\n\n")
+			fmt.Fprintf(os.Stderr, "Error: %s requires WSL2 on Windows\n\n", branding.CLIName)
+			fmt.Fprintf(os.Stderr, "%s depends on tmux and bash/zsh/fish, which are not available on native Windows.\n", branding.CLIName)
+			fmt.Fprintf(os.Stderr, "Please install and use WSL2 (Windows Subsystem for Linux 2) to run %s.\n\n", branding.CLIName)
 			fmt.Fprintf(os.Stderr, "For installation instructions, see:\n")
 			fmt.Fprintf(os.Stderr, "  https://docs.microsoft.com/en-us/windows/wsl/install\n")
 			os.Exit(1)
@@ -62,10 +63,10 @@ func main() {
 		}
 	}
 
-	if shouldCheckInit && os.Getenv("JEAN_INIT_ATTEMPTED") == "" {
+	if shouldCheckInit && os.Getenv(branding.GetEnvVar("INIT_ATTEMPTED")) == "" {
 		if err := ensureShellIntegration(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Could not auto-initialize shell integration: %v\n", err)
-			fmt.Fprintf(os.Stderr, "You can run 'jean init' manually to set up shell integration.\n")
+			fmt.Fprintf(os.Stderr, "You can run '%s init' manually to set up shell integration.\n", branding.CLIName)
 		}
 	}
 
@@ -79,7 +80,7 @@ func main() {
 			handleUpdate()
 			return
 		case "version":
-			fmt.Printf("jean version %s\n", version.CliVersion)
+			fmt.Printf("%s version %s\n", branding.CLIName, version.CliVersion)
 			os.Exit(0)
 		case "help":
 			printHelp()
@@ -97,7 +98,7 @@ func main() {
 
 	// Handle flags
 	if *versionFlag {
-		fmt.Printf("jean version %s\n", version.CliVersion)
+		fmt.Printf("%s version %s\n", branding.CLIName, version.CliVersion)
 		os.Exit(0)
 	}
 
@@ -150,7 +151,7 @@ func main() {
 			debugLog(fmt.Sprintf("DEBUG main: switchData=%q (has %d fields)", switchData, strings.Count(switchData, "|")+1))
 
 			// Check if we should write to a file (for shell wrapper integration)
-			if switchFile := os.Getenv("JEAN_SWITCH_FILE"); switchFile != "" {
+			if switchFile := os.Getenv(branding.GetEnvVar("SWITCH_FILE")); switchFile != "" {
 				// Write to file for shell wrapper
 				if err := os.WriteFile(switchFile, []byte(switchData), 0600); err != nil {
 					debugLog(fmt.Sprintf("Warning: could not write switch file: %v", err))
@@ -171,7 +172,7 @@ func main() {
 // Returns nil if wrapper is already active, otherwise performs init/update and re-exec.
 func ensureShellIntegration() error {
 	// Check if wrapper is already active
-	if os.Getenv("JEAN_SWITCH_FILE") != "" {
+	if os.Getenv(branding.GetEnvVar("SWITCH_FILE")) != "" {
 		// Wrapper is active, but check if it needs update
 		cfg, err := config.NewManager()
 		if err != nil {
@@ -202,7 +203,7 @@ func ensureShellIntegration() error {
 	}
 
 	// Set flag to prevent infinite loop
-	os.Setenv("JEAN_INIT_ATTEMPTED", "1")
+	os.Setenv(branding.GetEnvVar("INIT_ATTEMPTED"), "1")
 
 	// Load config for checksum tracking
 	cfg, err := config.NewManager()
@@ -349,19 +350,20 @@ func getRCFileForShell(shell install.Shell, homeDir string) string {
 }
 
 func printHelp() {
-	fmt.Printf(`jean - AI-Powered Git Worktree TUI with Claude Code Support v%s
+	cliName := branding.CLIName
+	fmt.Printf(`%s - AI-Powered Git Worktree TUI with Claude Code Support v%s
 
 A powerful terminal user interface for managing Git worktrees with integrated tmux
 session management, AI-powered workflows, GitHub PR automation, and Claude Code
 integration across multiple branches effortlessly.
 
 USAGE:
-    jean [OPTIONS]
-    jean init [FLAGS]
+    %s [OPTIONS]
+    %s init [FLAGS]
 
 COMMANDS:
-    init            Install or manage jean shell integration
-    update          Update jean to the latest version
+    init            Install or manage %s shell integration
+    update          Update %s to the latest version
     help            Show this help message
     version         Print version and exit
 
@@ -372,8 +374,8 @@ MAIN OPTIONS:
     -version        Print version and exit
 
 INIT COMMAND FLAGS:
-    -update         Update existing jean integration
-    -remove         Remove jean integration
+    -update         Update existing %s integration
+    -remove         Remove %s integration
     -dry-run        Show what would be done without making changes
     -shell <shell>  Specify shell (bash, zsh, fish). Auto-detected if not specified
 
@@ -398,35 +400,35 @@ KEYBINDINGS:
 SHELL INTEGRATION SETUP:
     One-time setup to enable directory switching:
 
-        jean init
+        %s init
 
     This will auto-detect your shell and install the necessary wrapper.
     After installation, restart your terminal or run: source ~/.bashrc (or ~/.zshrc, etc.)
 
     To update an existing installation:
-        jean init --update
+        %s init --update
 
     To remove the integration:
-        jean init --remove
+        %s init --remove
 
 EXAMPLES:
     # Run in current directory
-    jean
+    %s
 
     # Run for a specific repository
-    jean -path /path/to/repo
+    %s -path /path/to/repo
 
     # Set up shell integration (one-time)
-    jean init
+    %s init
 
     # Update shell integration
-    jean init --update
+    %s init --update
 
     # Remove shell integration
-    jean init --remove
+    %s init --remove
 
 For more information, visit: https://github.com/coollabsio/jean-tui
-`, version.CliVersion)
+`, cliName, version.CliVersion, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName)
 }
 
 // isRunningInWSL checks if the application is running inside WSL (Windows Subsystem for Linux)
