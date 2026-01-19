@@ -70,21 +70,34 @@ func (m *Manager) SessionExists(sessionName string) bool {
 	return err == nil
 }
 
-// isClaudeAvailable checks if the claude command is available in PATH
-func (m *Manager) isClaudeAvailable() bool {
-	cmd := exec.Command("sh", "-c", "command -v claude")
+// isAgentAvailable checks if the configured agent command is available in PATH
+func (m *Manager) isAgentAvailable() bool {
+	if !branding.IsAgentEnabled() {
+		return false // No agent configured (blank terminal mode)
+	}
+	cmd := exec.Command("sh", "-c", "command -v "+branding.AgentCommand)
 	err := cmd.Run()
 	return err == nil
 }
 
-// buildClaudeCommand constructs the proper claude command with flags
+// buildAgentCommand constructs the proper agent command with flags
 // path is the worktree path to add with --add-dir
 // isInitialized determines whether to use --continue flag
-func (m *Manager) buildClaudeCommand(path string, isInitialized bool) string {
-	if isInitialized {
-		return fmt.Sprintf("claude --add-dir %s --continue --permission-mode plan", path)
+func (m *Manager) buildAgentCommand(path string, isInitialized bool) string {
+	if !branding.IsAgentEnabled() {
+		return "" // Blank terminal mode
 	}
-	return fmt.Sprintf("claude --add-dir %s --permission-mode plan", path)
+
+	// For Claude, use specific flags
+	if branding.IsClaudeAgent() {
+		if isInitialized {
+			return fmt.Sprintf("claude --add-dir %s --continue --permission-mode plan", path)
+		}
+		return fmt.Sprintf("claude --add-dir %s --permission-mode plan", path)
+	}
+
+	// For other agents, just run the command as-is
+	return branding.AgentCommand
 }
 
 // createOrAttach creates a new session or attaches to existing one
@@ -105,24 +118,24 @@ func (m *Manager) createOrAttach(path, branch, repoName string, autoStartClaude 
 
 // Create creates a new tmux session with both windows
 // Window 1: terminal (shell) - created automatically by new-session with base-index 1
-// Window 2: claude (if autoStartClaude is true)
-func (m *Manager) Create(sessionName, path string, autoStartClaude bool, targetWindow string) error {
+// Window 2: agent window (if autoStartAgent is true)
+func (m *Manager) Create(sessionName, path string, autoStartAgent bool, targetWindow string) error {
 	// Create detached session with window 1 (terminal) - base-index 1 makes first window = 1
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", path, "-n", "terminal")
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
-	// Create window 2 (claude) if autoStartClaude is true
-	if autoStartClaude {
-		if m.isClaudeAvailable() {
-			// Claude is available - create window with proper flags
-			// Use --permission-mode plan (shell wrapper handles --continue for initialized sessions)
-			claudeCmd := m.buildClaudeCommand(path, false)
-			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude", claudeCmd)
+	// Create window 2 (agent) if autoStartAgent is true
+	if autoStartAgent {
+		agentWindowName := branding.AgentWindowName
+		if m.isAgentAvailable() {
+			// Agent is available - create window with proper command
+			agentCmd := m.buildAgentCommand(path, false)
+			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", agentWindowName, agentCmd)
 		} else {
-			// Claude not available - create shell window as fallback
-			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", "claude")
+			// Agent not available or blank terminal mode - create shell window
+			cmd = exec.Command("tmux", "new-window", "-t", sessionName+":2", "-c", path, "-n", agentWindowName)
 		}
 
 		if err := cmd.Run(); err != nil {
@@ -132,22 +145,24 @@ func (m *Manager) Create(sessionName, path string, autoStartClaude bool, targetW
 	}
 
 	// Attach to the target window
-	return m.AttachToWindow(sessionName, path, autoStartClaude, targetWindow)
+	return m.AttachToWindow(sessionName, path, autoStartAgent, targetWindow)
 }
 
 // AttachToWindow attaches to a specific window in a session
 // Creates the window if it doesn't exist
-func (m *Manager) AttachToWindow(sessionName, path string, autoStartClaude bool, targetWindow string) error {
+func (m *Manager) AttachToWindow(sessionName, path string, autoStartAgent bool, targetWindow string) error {
 	var windowIndex string
 	var windowName string
 	var windowCommand string
 
-	if targetWindow == "claude" {
+	// Check if targeting the agent window (could be "claude" or the configured agent window name)
+	agentWindowName := branding.AgentWindowName
+	if targetWindow == "claude" || targetWindow == agentWindowName {
 		windowIndex = "2"
-		windowName = "claude"
-		// Use proper claude command with flags, or fallback to shell
-		if m.isClaudeAvailable() {
-			windowCommand = m.buildClaudeCommand(path, false)
+		windowName = agentWindowName
+		// Use proper agent command with flags, or fallback to shell
+		if m.isAgentAvailable() {
+			windowCommand = m.buildAgentCommand(path, false)
 		} else {
 			windowCommand = "" // Fallback to shell
 		}

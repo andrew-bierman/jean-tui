@@ -22,6 +22,14 @@ func TestDefaultValues(t *testing.T) {
 	if EnvVarPrefix != "JEAN" {
 		t.Errorf("Expected EnvVarPrefix 'JEAN', got '%s'", EnvVarPrefix)
 	}
+
+	if AgentCommand != "claude" {
+		t.Errorf("Expected AgentCommand 'claude', got '%s'", AgentCommand)
+	}
+
+	if AgentWindowName != "claude" {
+		t.Errorf("Expected AgentWindowName 'claude', got '%s'", AgentWindowName)
+	}
 }
 
 // TestGetEnvVar tests the GetEnvVar function
@@ -101,6 +109,22 @@ func TestGetShellWrapperMarkerEnd(t *testing.T) {
 	expected := "# END JEAN INTEGRATION"
 	if marker != expected {
 		t.Errorf("Expected '%s', got '%s'", expected, marker)
+	}
+}
+
+// TestIsAgentEnabled tests the IsAgentEnabled function
+func TestIsAgentEnabled(t *testing.T) {
+	// Default should be enabled (claude)
+	if !IsAgentEnabled() {
+		t.Errorf("Expected IsAgentEnabled() to return true with default AgentCommand='claude'")
+	}
+}
+
+// TestIsClaudeAgent tests the IsClaudeAgent function
+func TestIsClaudeAgent(t *testing.T) {
+	// Default should be true (claude is the default agent)
+	if !IsClaudeAgent() {
+		t.Errorf("Expected IsClaudeAgent() to return true with default AgentCommand='claude'")
 	}
 }
 

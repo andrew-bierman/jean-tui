@@ -34,6 +34,15 @@ var (
 
 	// EnvVarPrefix is the prefix for environment variables (e.g., "JEAN", "RALPH", "OPENCODE")
 	EnvVarPrefix = "JEAN"
+
+	// AgentCommand is the command to run in the agent window.
+	// Default is "claude" which runs Claude CLI with appropriate flags.
+	// Set to "" (empty) for a blank terminal - useful for worktree-only mode.
+	// Set to any command (e.g., "ralph-tui", "aider", "cursor") to run that instead.
+	AgentCommand = "claude"
+
+	// AgentWindowName is the name of the agent window in tmux (e.g., "claude", "agent", "ai")
+	AgentWindowName = "claude"
 )
 
 // GetEnvVar returns the full environment variable name with the configured prefix.
@@ -82,4 +91,15 @@ func GetShellWrapperMarkerStart() string {
 func GetShellWrapperMarkerEnd() string {
 	upper := strings.ToUpper(CLIName)
 	return fmt.Sprintf("# END %s INTEGRATION", upper)
+}
+
+// IsAgentEnabled returns true if an agent command is configured.
+// Returns false if AgentCommand is empty (blank terminal mode).
+func IsAgentEnabled() bool {
+	return AgentCommand != ""
+}
+
+// IsClaudeAgent returns true if the default Claude agent is configured.
+func IsClaudeAgent() bool {
+	return AgentCommand == "claude"
 }

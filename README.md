@@ -210,9 +210,18 @@ go run main.go -path /path/to/test/repo
 
 ### Custom Start Commands
 
-Jean supports building with custom CLI names for forks or specialized deployments. This allows you to create variants like `ralph-tui`, `opencode`, or any custom command name while keeping all jean functionality.
+Jean supports building with custom CLI names and agent commands for forks or specialized deployments. This allows you to create variants like `ralph-tui`, `opencode`, or any custom command name while keeping all jean functionality.
 
-**Build with custom branding:**
+**Using Makefile (recommended):**
+```bash
+# Build with custom name
+make build-custom NAME=ralph-tui
+
+# Build with blank terminal (worktree management only, no agent)
+make build-blank
+```
+
+**Build with custom branding (manual):**
 ```bash
 go build -ldflags "\
   -X github.com/coollabsio/jean-tui/internal/branding.CLIName=myapp \
@@ -229,25 +238,32 @@ go build -ldflags "\
 | `SessionPrefix` | `jean-` | `opencode-` | Tmux session names |
 | `ConfigDirName` | `jean` | `opencode` | Config directory (`~/.config/<name>`) |
 | `EnvVarPrefix` | `JEAN` | `OPENCODE` | Environment variables |
+| `AgentCommand` | `claude` | `ralph-tui` or `` | Command in agent window |
+| `AgentWindowName` | `claude` | `agent` or `shell` | Tmux window name |
 
-**Quick example for `ralph-tui`:**
+**Blank terminal mode (worktree-only):**
+```bash
+# Build with no agent - just worktree management with blank terminals
+go build -ldflags "\
+  -X github.com/coollabsio/jean-tui/internal/branding.AgentCommand= \
+  -X github.com/coollabsio/jean-tui/internal/branding.AgentWindowName=shell" \
+  -o worktree-tui
+```
+
+**Custom agent command (e.g., ralph-tui):**
 ```bash
 go build -ldflags "\
-  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=ralph-tui \
-  -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=ralph- \
-  -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=ralph \
-  -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=RALPH" \
-  -o ralph-tui
-
-# Now run with your custom command
-./ralph-tui init
-./ralph-tui
+  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=ralph-launcher \
+  -X github.com/coollabsio/jean-tui/internal/branding.AgentCommand=ralph-tui \
+  -X github.com/coollabsio/jean-tui/internal/branding.AgentWindowName=ralph" \
+  -o ralph-launcher
 ```
 
 This is useful for:
-- Creating specialized agent launchers (e.g., `ralph-tui` for a different AI agent workflow)
-- Team-specific deployments with custom naming
-- Building forks with distinct identities while tracking upstream jean
+- **Blank terminal mode**: Worktree management only, start any agent you want manually
+- **Custom agents**: Launch `ralph-tui`, `aider`, or any other AI agent instead of Claude
+- **Team deployments**: Custom naming with specific agent configurations
+- **Forks**: Distinct identities while tracking upstream jean
 
 ### Project Structure
 - `main.go` - CLI entry point
