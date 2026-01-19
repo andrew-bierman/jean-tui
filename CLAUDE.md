@@ -63,7 +63,7 @@ Follow these steps when releasing a new version:
 
    ## Installation
 
-   See the [README](https://github.com/coollabsio/jean-tui#installation) for installation instructions.
+   See the [README](https://github.com/andrew-bierman/jean-tui#installation) for installation instructions.
    EOF
    )"
    ```

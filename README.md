@@ -27,27 +27,20 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and designed
 
 ## Installation
 
-### Quick Install (Recommended)
+### From Source (Recommended)
 
 ```bash
-curl -fsSL https://github.com/coollabsio/jean-tui/raw/main/install.sh | bash
-```
-
-Or with Go 1.21+:
-
-```bash
-go install github.com/coollabsio/jean-tui@latest
+git clone https://github.com/andrew-bierman/jean-tui
+cd jean-tui
+go build -o jean
+sudo mv jean /usr/local/bin/
 jean init  # Set up shell integration
 ```
 
-### From Source
+### Quick Install Script
 
 ```bash
-git clone https://github.com/coollabsio/jean-tui
-cd jean
-go build -o jean
-sudo mv jean /usr/local/bin/
-jean init
+curl -fsSL https://github.com/andrew-bierman/jean-tui/raw/main/install.sh | bash
 ```
 
 ## Prerequisites
