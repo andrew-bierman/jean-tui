@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	repoOwner = "coollabsio"
+	repoOwner = "andrew-bierman"
 	repoName  = "jean-tui"
 )
 
