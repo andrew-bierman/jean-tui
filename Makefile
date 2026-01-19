@@ -13,17 +13,17 @@ build:
 build-custom:
 	@if [ -z "$(NAME)" ]; then echo "Usage: make build-custom NAME=myapp"; exit 1; fi
 	go build -ldflags "\
-		-X github.com/coollabsio/jean-tui/internal/branding.CLIName=$(NAME) \
-		-X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=$(or $(PREFIX),$(NAME)-) \
-		-X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=$(or $(CONFIG),$(NAME)) \
-		-X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=$(or $(ENVPREFIX),$(shell echo $(NAME) | tr '[:lower:]-' '[:upper:]_'))" \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.CLIName=$(NAME) \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.SessionPrefix=$(or $(PREFIX),$(NAME)-) \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.ConfigDirName=$(or $(CONFIG),$(NAME)) \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.EnvVarPrefix=$(or $(ENVPREFIX),$(shell echo $(NAME) | tr '[:lower:]-' '[:upper:]_'))" \
 		-o $(NAME)
 
 # Build with blank terminal (no agent, worktree-only mode)
 build-blank:
 	go build -ldflags "\
-		-X github.com/coollabsio/jean-tui/internal/branding.AgentCommand= \
-		-X github.com/coollabsio/jean-tui/internal/branding.AgentWindowName=shell" \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.AgentCommand= \
+		-X github.com/andrew-bierman/jean-tui/internal/branding.AgentWindowName=shell" \
 		-o jean
 
 # Run tests

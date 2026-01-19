@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/coollabsio/jean-tui/config"
-	"github.com/coollabsio/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/config"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
 )
 
 // Shell represents a shell type

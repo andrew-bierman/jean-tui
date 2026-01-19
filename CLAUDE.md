@@ -672,13 +672,13 @@ The current tmux integration pattern (`session/tmux.go`) can be extended to supp
 
 ## Module Information
 
-**Module Name**: `github.com/coollabsio/jean-tui`
+**Module Name**: `github.com/andrew-bierman/jean-tui`
 
-All internal imports use `github.com/coollabsio/jean-tui` as the import path. When adding new packages, use this as the base path:
-- `github.com/coollabsio/jean-tui/tui`
-- `github.com/coollabsio/jean-tui/git`
-- `github.com/coollabsio/jean-tui/config`
-- `github.com/coollabsio/jean-tui/session`
+All internal imports use `github.com/andrew-bierman/jean-tui` as the import path. When adding new packages, use this as the base path:
+- `github.com/andrew-bierman/jean-tui/tui`
+- `github.com/andrew-bierman/jean-tui/git`
+- `github.com/andrew-bierman/jean-tui/config`
+- `github.com/andrew-bierman/jean-tui/session`
 
 ## Prerequisites
 

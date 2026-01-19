@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/coollabsio/jean-tui/session"
+	"github.com/andrew-bierman/jean-tui/session"
 )
 
 // TestSearchBasedModalInput_NavigateUp tests up arrow navigation in search modal

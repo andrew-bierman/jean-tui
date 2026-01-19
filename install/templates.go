@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/coollabsio/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
 )
 
 // GetBashZshWrapper returns the wrapper function for bash and zsh shells

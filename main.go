@@ -11,12 +11,12 @@ import (
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/coollabsio/jean-tui/config"
-	"github.com/coollabsio/jean-tui/install"
-	"github.com/coollabsio/jean-tui/internal/branding"
-	"github.com/coollabsio/jean-tui/internal/update"
-	"github.com/coollabsio/jean-tui/internal/version"
-	"github.com/coollabsio/jean-tui/tui"
+	"github.com/andrew-bierman/jean-tui/config"
+	"github.com/andrew-bierman/jean-tui/install"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/internal/update"
+	"github.com/andrew-bierman/jean-tui/internal/version"
+	"github.com/andrew-bierman/jean-tui/tui"
 )
 
 // Global flag for debug logging (set after config is loaded)
@@ -427,7 +427,7 @@ EXAMPLES:
     # Remove shell integration
     %s init --remove
 
-For more information, visit: https://github.com/coollabsio/jean-tui
+For more information, visit: https://github.com/andrew-bierman/jean-tui
 `, cliName, version.CliVersion, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName, cliName)
 }
 

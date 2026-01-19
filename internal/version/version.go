@@ -10,7 +10,7 @@ import (
 	"time"
 
 	gover "github.com/hashicorp/go-version"
-	"github.com/coollabsio/jean-tui/config"
+	"github.com/andrew-bierman/jean-tui/config"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/coollabsio/jean-tui/internal/branding"
-	"github.com/coollabsio/jean-tui/openrouter"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/openrouter"
 )
 
 // AIPrompts represents customizable AI prompts for various generation tasks

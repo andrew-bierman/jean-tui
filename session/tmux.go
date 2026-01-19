@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coollabsio/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
 )
 
 // Session represents a tmux session

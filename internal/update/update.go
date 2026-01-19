@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 
 	gover "github.com/hashicorp/go-version"
-	"github.com/coollabsio/jean-tui/internal/branding"
+	"github.com/andrew-bierman/jean-tui/internal/branding"
 )
 
 const (

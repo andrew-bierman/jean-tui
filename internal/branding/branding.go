@@ -2,17 +2,17 @@
 //
 // All values can be overridden at build time using ldflags:
 //
-//	go build -ldflags "-X github.com/coollabsio/jean-tui/internal/branding.CLIName=ralph-tui \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=ralph- \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=ralph \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=RALPH"
+//	go build -ldflags "-X github.com/andrew-bierman/jean-tui/internal/branding.CLIName=ralph-tui \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.SessionPrefix=ralph- \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.ConfigDirName=ralph \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.EnvVarPrefix=RALPH"
 //
 // Example for creating a custom fork named "opencode":
 //
-//	go build -ldflags "-X github.com/coollabsio/jean-tui/internal/branding.CLIName=opencode \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=opencode- \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=opencode \
-//	                   -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=OPENCODE"
+//	go build -ldflags "-X github.com/andrew-bierman/jean-tui/internal/branding.CLIName=opencode \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.SessionPrefix=opencode- \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.ConfigDirName=opencode \
+//	                   -X github.com/andrew-bierman/jean-tui/internal/branding.EnvVarPrefix=OPENCODE"
 package branding
 
 import (

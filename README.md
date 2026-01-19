@@ -27,14 +27,21 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and designed
 
 ## Installation
 
-### From Source (Recommended)
+### With Go (Recommended)
+
+```bash
+go install github.com/andrew-bierman/jean-tui@latest
+jean init  # Set up shell integration
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/andrew-bierman/jean-tui
 cd jean-tui
 go build -o jean
 sudo mv jean /usr/local/bin/
-jean init  # Set up shell integration
+jean init
 ```
 
 ### Quick Install Script
@@ -217,10 +224,10 @@ make build-blank
 **Build with custom branding (manual):**
 ```bash
 go build -ldflags "\
-  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=myapp \
-  -X github.com/coollabsio/jean-tui/internal/branding.SessionPrefix=myapp- \
-  -X github.com/coollabsio/jean-tui/internal/branding.ConfigDirName=myapp \
-  -X github.com/coollabsio/jean-tui/internal/branding.EnvVarPrefix=MYAPP" \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.CLIName=myapp \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.SessionPrefix=myapp- \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.ConfigDirName=myapp \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.EnvVarPrefix=MYAPP" \
   -o myapp
 ```
 
@@ -238,17 +245,17 @@ go build -ldflags "\
 ```bash
 # Build with no agent - just worktree management with blank terminals
 go build -ldflags "\
-  -X github.com/coollabsio/jean-tui/internal/branding.AgentCommand= \
-  -X github.com/coollabsio/jean-tui/internal/branding.AgentWindowName=shell" \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.AgentCommand= \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.AgentWindowName=shell" \
   -o worktree-tui
 ```
 
 **Custom agent command (e.g., ralph-tui):**
 ```bash
 go build -ldflags "\
-  -X github.com/coollabsio/jean-tui/internal/branding.CLIName=ralph-launcher \
-  -X github.com/coollabsio/jean-tui/internal/branding.AgentCommand=ralph-tui \
-  -X github.com/coollabsio/jean-tui/internal/branding.AgentWindowName=ralph" \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.CLIName=ralph-launcher \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.AgentCommand=ralph-tui \
+  -X github.com/andrew-bierman/jean-tui/internal/branding.AgentWindowName=ralph" \
   -o ralph-launcher
 ```
 
