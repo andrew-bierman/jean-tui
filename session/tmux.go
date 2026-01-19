@@ -225,6 +225,10 @@ func getTmuxConfig() string {
 # Enable mouse support for scrolling and selection
 set -g mouse on
 
+# Fix scrolling in apps that use alternate screen (like Claude CLI)
+# This allows scrolling to enter copy-mode and scroll through history
+set -g terminal-overrides 'xterm*:smcup@:rmcup@'
+
 # Enable clickable links (URLs and local filesystem paths)
 set -g allow-passthrough on
 set -ga terminal-features "*:hyperlinks"
