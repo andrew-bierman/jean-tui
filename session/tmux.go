@@ -250,8 +250,8 @@ set -g pane-base-index 1
 # Renumber windows when one is closed
 set -g renumber-windows on
 
-# Ctrl-D to detach
-bind-key -n C-d detach-client
+# Detach with Ctrl-B D (default tmux behavior)
+# Note: Ctrl-D sends EOF which closes Claude, so we don't override it
 
 # Navigate between windows with Shift+arrows
 bind-key -n S-Right next-window
