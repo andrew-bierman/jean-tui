@@ -168,9 +168,9 @@ go_install() {
     fi
 
     if go install github.com/andrew-bierman/jean-tui${GO_VERSION}; then
-        # Find the binary installed by go
+        # Find the binary installed by go (named jean-tui from module name)
         GOPATH="${GOPATH:-$HOME/go}"
-        JEAN_BINARY="$GOPATH/bin/jean"
+        JEAN_BINARY="$GOPATH/bin/jean-tui"
 
         if [[ ! -f "$JEAN_BINARY" ]]; then
             print_error "Binary not found after go install"
