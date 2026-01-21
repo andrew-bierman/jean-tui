@@ -2065,13 +2065,26 @@ func (m Model) renderHelperModal() string {
 				{"s", "Open settings"},
 				{"e", "Select default editor"},
 				{"S", "View tmux sessions"},
+				{"g", "Open repo in browser"},
 				{"h", "Show this help"},
 				{"q", "Quit application"},
 			},
 		},
+		{
+			name: "Inside Tmux Session",
+			keybindings: []struct {
+				key         string
+				description string
+			}{
+				{"Ctrl+B D", "Detach (exit without closing)"},
+				{"Shift+←/→", "Switch between windows"},
+				{"Ctrl+B [", "Enter scroll/copy mode"},
+				{"q", "Exit scroll mode"},
+			},
+		},
 	}
 
-	// Split categories into two groups: left (3) and right (2)
+	// Split categories into two columns
 	leftCategories := categories[:3]
 	rightCategories := categories[3:]
 
