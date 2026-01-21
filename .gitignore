@@ -1,5 +1,5 @@
-# Binaries
-jean
+# Binaries (only at root level)
+/jean
 *.exe
 *.exe~
 *.dll
