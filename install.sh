@@ -95,7 +95,7 @@ detect_system() {
 download_binary() {
     print_header "Downloading binary from GitHub releases..."
 
-    REPO="coollabsio/jean-tui"
+    REPO="andrew-bierman/jean-tui"
 
     # Use specified version or fetch latest
     if [[ -z "$REQUESTED_VERSION" ]]; then
@@ -167,7 +167,7 @@ go_install() {
         GO_VERSION="@$REQUESTED_VERSION"
     fi
 
-    if go install github.com/coollabsio/jean-tui${GO_VERSION}; then
+    if go install github.com/andrew-bierman/jean-tui${GO_VERSION}; then
         # Find the binary installed by go
         GOPATH="${GOPATH:-$HOME/go}"
         JEAN_BINARY="$GOPATH/bin/jean"
@@ -306,7 +306,7 @@ print_next_steps() {
     echo ""
     echo "For more information:"
     echo "  - Help: jean --help"
-    echo "  - Documentation: https://github.com/coollabsio/jean-tui"
+    echo "  - Documentation: https://github.com/andrew-bierman/jean-tui"
     echo ""
 }
 
