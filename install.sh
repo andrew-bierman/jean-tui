@@ -167,7 +167,8 @@ go_install() {
         GO_VERSION="@$REQUESTED_VERSION"
     fi
 
-    if go install github.com/andrew-bierman/jean-tui/cmd/jean${GO_VERSION}; then
+    # Use GOPROXY=direct to bypass proxy caching for latest commits
+    if GOPROXY=direct go install github.com/andrew-bierman/jean-tui/cmd/jean${GO_VERSION}; then
         # Find the binary installed by go
         GOPATH="${GOPATH:-$HOME/go}"
         JEAN_BINARY="$GOPATH/bin/jean"
