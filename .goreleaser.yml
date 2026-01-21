@@ -7,7 +7,7 @@ env:
 
 builds:
   - id: jean
-    main: ./main.go
+    main: ./cmd/jean
     binary: jean
     goos:
       - linux

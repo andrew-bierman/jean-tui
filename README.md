@@ -30,7 +30,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea) and designed
 ### With Go (Recommended)
 
 ```bash
-go install github.com/andrew-bierman/jean-tui@latest
+go install github.com/andrew-bierman/jean-tui/cmd/jean@latest
 jean init  # Set up shell integration
 ```
 
@@ -39,7 +39,7 @@ jean init  # Set up shell integration
 ```bash
 git clone https://github.com/andrew-bierman/jean-tui
 cd jean-tui
-go build -o jean
+go build -o jean ./cmd/jean
 sudo mv jean /usr/local/bin/
 jean init
 ```

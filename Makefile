@@ -7,7 +7,7 @@ all: build
 
 # Build the default binary
 build:
-	go build -o jean
+	go build -o jean ./cmd/jean
 
 # Build with custom branding (example: make build-custom NAME=myapp PREFIX=myapp-)
 build-custom:
@@ -17,14 +17,14 @@ build-custom:
 		-X github.com/andrew-bierman/jean-tui/internal/branding.SessionPrefix=$(or $(PREFIX),$(NAME)-) \
 		-X github.com/andrew-bierman/jean-tui/internal/branding.ConfigDirName=$(or $(CONFIG),$(NAME)) \
 		-X github.com/andrew-bierman/jean-tui/internal/branding.EnvVarPrefix=$(or $(ENVPREFIX),$(shell echo $(NAME) | tr '[:lower:]-' '[:upper:]_'))" \
-		-o $(NAME)
+		-o $(NAME) ./cmd/jean
 
 # Build with blank terminal (no agent, worktree-only mode)
 build-blank:
 	go build -ldflags "\
 		-X github.com/andrew-bierman/jean-tui/internal/branding.AgentCommand= \
 		-X github.com/andrew-bierman/jean-tui/internal/branding.AgentWindowName=shell" \
-		-o jean
+		-o jean ./cmd/jean
 
 # Run tests
 test:
@@ -55,7 +55,7 @@ install: build
 
 # Run locally
 run:
-	go run main.go
+	go run ./cmd/jean
 
 # Initialize dependencies
 deps:
